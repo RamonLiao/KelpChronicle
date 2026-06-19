@@ -1,0 +1,16 @@
+# Claude working notes — not committed (per core rule)
+tasks/
+
+# deps / build
+node_modules/
+dist/
+build/
+*.log
+
+# move
+move/build/
+
+# env
+.env
+.env.*
+!.env.example
