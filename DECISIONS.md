@@ -62,3 +62,25 @@ probe (`spike/check.ts`) still needs human prep before it can run:
       the correct testnet relayer from the playground/docs and set `MEMWAL_RELAYER`.
 - [ ] **Confirm `MEMWAL_PACKAGE_ID`** (plan placeholder `0xcf6ad7…229c6`) from docs.
 - [ ] Record observed indexing latency (#303) when the round-trip runs (Task 7 step 2).
+
+## Task 10: HTTP endpoints auth is deliberately out-of-scope (demo) — 2026-06-21
+
+`/run` `/memory` `/restore` ship **unauthenticated** by design. Two independent
+reviews (codex + background security review) flagged this HIGH:
+- `/run` is a funded sink — any caller spends the backend signer's gas.
+- `agent` is trusted from the request body → attestation "agent" label is spoofable.
+- `/memory` has no per-agent scope → cross-tenant read.
+
+**Why tolerated for the demo:** MODE-B backend is demo-local (single operator,
+CORS-restricted origin); single-flight caps concurrent gas to 1 in-flight tx;
+the honest-badge story already says MemWal = TEE relayer + delegate key (NOT
+trustless), so a spoofable agent label doesn't overclaim. Same disposition as the
+earlier codex namespace/agent-filter finding (account-scoped private namespace).
+
+**MUST-FIX before any public/multi-tenant deployment** (not before the demo):
+- [ ] Authn on `/run` `/restore`: client signs a challenge with the keypair that
+      controls `agent`; verify sig against `agent` before `runAgent`. Or derive
+      `agent` from an authenticated session, never trust the body field.
+- [ ] Per-principal/IP rate-limit + per-run gas budget / signer circuit-breaker.
+- [ ] `/memory`: pass authenticated agent as a mandatory filter into `recallArtifacts`
+      (or per-agent MemWal namespace); reject wildcard/empty topic without agent scope.
