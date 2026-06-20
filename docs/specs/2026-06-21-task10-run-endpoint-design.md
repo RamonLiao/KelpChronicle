@@ -23,8 +23,8 @@ handler → Red Team Protocol applies.
 
 | # | Vector | Draft gap | Defense |
 |---|--------|-----------|---------|
-| 1 | `agent` unvalidated → flows into `buildAttestTx` (frozen-object owner) + namespace; bad/empty value → on-chain tx fails or attests to garbage | none | `isSuiAddress(agent)` — `0x` + 64 lowercased hex; reject 400 |
-| 2 | Economic DoS — repeated `/run` drains signer gas + floods namespace | none | **single-flight lock**: one run at a time; concurrent calls → 409. Full rate-limit deferred (YAGNI for demo). |
+| 1 | `agent` unvalidated → reaches `tx.pure.address()` which throws on malformed input, surfacing as an ugly 502 + a wasted single-flight lock | none | early-reject at HTTP boundary for a clean 400 (client error, not server). `tx.pure.address` already guards the tx itself; this is about correct status code + not polluting the lock |
+| 2 | Concurrent `/run` from the **single Ed25519 signer** → gas-coin / owned-object **equivocation** (object-version conflict) → both attest txs can revert. Repeated sequential runs also drain gas. | none | **single-flight lock**: serializes runs so the one signer never submits concurrent txs (a Sui *correctness* requirement, not just DoS mitigation); concurrent calls → 409. Sequential-volume rate-limit deferred (YAGNI for demo). |
 | 3 | Error detail leak — `String(e)` returned to client may expose relayer URL / signer / stack | `detail: String(e)` echoed | full error to server log only; client gets generic message |
 | 4 | Unbounded `topic` → oversized blob / slow hash | trim only | length cap (200 chars); over → 400 |
 
@@ -52,10 +52,11 @@ get a fresh lock.
 
 ### `POST /run { topic: string, agent: string }`
 - validate `topic`: non-empty after trim, ≤ 200 chars → else 400 `{error:'topic required'}` / `{error:'topic too long'}`
-- validate `agent`: `isSuiAddress` → else 400 `{error:'invalid agent address'}`
+- validate `agent`: `normalizeSuiAddress` then `isValidSuiAddress` → else 400 `{error:'invalid agent address'}`. Pass the **normalized** address downstream so the attested owner is canonical.
 - single-flight: if `inFlight` → 409 `{error:'a run is already in progress'}`
 - else set `inFlight=true`, `await run(topic, agent, Date.now())`, return Task 9
   `RunResult` shape (`artifact`, `blobId`, `attestationDigest`, `knownHit`, `freshCount`); `finally` clears lock
+- **latency semantic:** `defaultExecutor` waits for on-chain finality (`waitForTransaction`), so `/run` holds the lock through confirmation (~seconds on testnet) and returns only once anchored — the response guarantees the attestation is live (frontend can show ✓ Verified immediately). It is NOT sub-second; Task 12 must not assume so. All callers during that window get 409.
 - on throw: log full error server-side; 502 `{error:'memory/agent service error'}` (no detail)
 
 ### `GET /memory?topic=<string>`
@@ -66,21 +67,25 @@ get a fresh lock.
 - `await restore()` → `{ok:true}`
 - on throw: log; 502 `{error:'restore failed'}`
 
-## `isSuiAddress`
+## Address validation
 
-Use `@mysten/sui/utils` `isValidSuiAddress` if present (verify the symbol before
-use, per lessons); else local regex `/^0x[0-9a-f]{64}$/` against the lowercased
-input. Normalize (lowercase) before both validation and passing downstream so the
-attested owner is canonical.
+Use `@mysten/sui/utils` `normalizeSuiAddress` + `isValidSuiAddress` (both verified
+present in 2.19.0). Do NOT use a strict `/^0x[0-9a-f]{64}$/` regex — Sui addresses
+may arrive non-zero-padded (e.g. `0x6`), and a strict 64-hex regex would 400 a
+legitimate short address. `normalizeSuiAddress` pads first, then `isValidSuiAddress`
+checks; the normalized form is what flows to `tx.pure.address` so the attested owner
+is canonical.
 
 ## Testing (`backend/src/routes.test.ts`, node:test)
 
 Inject fake deps; assert the **intent**, not just shape:
 
 - happy path: valid topic+agent → 200, body === fake `run` return; `run` called with `(topic, agent, <number>)`
-- bad agent (non-hex / wrong length / mixed-case-only) → 400, `run` NOT called (no gas spent — the WHY)
+- bad agent (non-hex / over-length / empty) → 400, `run` NOT called (no gas spent — the WHY)
+- **non-padded short address** (e.g. `0x6`) → 200, normalized to 64-hex before reaching `run` (regex would have wrongly 400'd it — the WHY)
+- concurrent guard exists for Sui correctness, not just DoS: assert second concurrent call → 409 so the single signer never submits parallel txs (prevents gas-coin equivocation — the WHY)
 - empty / whitespace topic → 400; over-200-char topic → 400; `run` NOT called
-- concurrent: two `runHandler` calls while first's `run` is pending → second 409; first still resolves
+- concurrent: while first's `run` is pending the first call still resolves (lock doesn't deadlock the holder)
 - `run` throws → 502, response body has no `detail` / no raw error string (leak guard — the WHY)
 - lock released after throw: a failing run does not wedge the endpoint (next call proceeds)
 - `/memory` and `/restore` throw → 502 generic
