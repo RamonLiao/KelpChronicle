@@ -16,3 +16,16 @@ move/build/
 !.env.example
 tasks/progress.md
 tasks/lessons.md
+
+# Project notes
+plan.md
+frontend-notes.md
+backend-notes.md
+move-notes.md
+gotchas.md
+
+# AI config
+.claude/
+CLAUDE.md
+
+
