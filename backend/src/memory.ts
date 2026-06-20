@@ -26,6 +26,13 @@ export function defaultClient(): MemoryClient {
 
 const isStr = (v: unknown): v is string => typeof v === 'string';
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+// runId feeds Math.max(...)+1 then tx.pure.u64() when the next run anchors on-chain. A
+// poisoned row with a negative/fractional runId would survive a plain finite check, then
+// crash u64 encoding — a persistent poisoned-namespace DoS. Bound it here, at the trust
+// boundary. Cap below MAX_SAFE_INTEGER so the +1 stays a safe integer; real run counters
+// never approach this, so it's purely an anti-poison ceiling.
+const isRunId = (v: unknown): v is number =>
+  Number.isSafeInteger(v) && (v as number) >= 0 && (v as number) < Number.MAX_SAFE_INTEGER;
 
 // Full structural guard, not just a schema-tag check: a row may carry the right
 // `schema` string but a garbage body (missing findings, wrong types). Such rows
@@ -38,7 +45,7 @@ function isArtifact(v: unknown): v is Artifact {
     a.schema === 'recall.report.v1' &&
     isStr(a.agent) &&
     isStr(a.namespace) &&
-    isNum(a.runId) &&
+    isRunId(a.runId) &&
     isNum(a.createdAtMs) &&
     isStr(a.topic) &&
     Array.isArray(a.priorRunIds) &&

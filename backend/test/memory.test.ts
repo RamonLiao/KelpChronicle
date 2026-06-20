@@ -30,6 +30,11 @@ test('recallArtifacts parses valid artifacts and drops malformed/foreign rows', 
         { text: JSON.stringify({ ...artifact, findings: 'oops' }) }, // findings not an array
         { text: JSON.stringify({ ...artifact, findings: [{ key: 1 }] }) }, // finding fields wrong type
         { text: JSON.stringify({ ...artifact, runId: 'x' }) }, // runId not a number
+        // runId feeds tx.pure.u64() on the next run's anchor; a negative/fractional
+        // value passes a plain finite check but crashes Math.max(...)+1 → u64 encoding.
+        // These must be dropped at the boundary or the namespace is a persistent DoS.
+        { text: JSON.stringify({ ...artifact, runId: -1 }) }, // negative → drop
+        { text: JSON.stringify({ ...artifact, runId: 1.5 }) }, // fractional → drop
       ],
     }),
   };
