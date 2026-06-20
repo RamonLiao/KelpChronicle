@@ -14,3 +14,7 @@ export const RECALL_ATTEST_TARGET = `${RECALL_PACKAGE_ID}::${RECALL_MODULE}::att
 // MemWal — still placeholder until account is provisioned (blocks Task 7+).
 export const MEMWAL_PACKAGE_ID =
   process.env.MEMWAL_PACKAGE_ID ?? '0xcf6ad7000000000000000000000000000000000000000000000000000000229c6';
+
+// MemWal relayer (TEE server) + memory namespace. Key/accountId stay in env (secrets).
+export const MEMWAL_RELAYER = process.env.MEMWAL_RELAYER ?? 'https://relayer.memwal.ai';
+export const MEMWAL_NAMESPACE = process.env.MEMWAL_NAMESPACE ?? 'recall';
