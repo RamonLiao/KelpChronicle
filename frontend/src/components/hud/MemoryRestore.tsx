@@ -3,12 +3,17 @@ import QRCode from 'qrcode';
 import { Panel } from './Panel.tsx';
 import { api, type Artifact } from '../../lib/api.ts';
 
-export function MemoryRestore({ artifacts, onClearLocal, onRestored }: {
-  artifacts: Artifact[]; onClearLocal: () => void; onRestored: () => void;
+export function MemoryRestore({ artifacts, topic, onClearLocal, onRestored }: {
+  artifacts: Artifact[]; topic: string; onClearLocal: () => void; onRestored: () => void;
 }) {
   const [qr, setQr] = useState<string>('');
   const [busy, setBusy] = useState(false);
-  useEffect(() => { QRCode.toDataURL(window.location.href, { margin: 1, width: 96 }).then(setQr).catch(() => {}); }, []);
+  // encode the current topic into the QR target so the scanned device opens the same memory
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    u.searchParams.set('topic', topic);
+    QRCode.toDataURL(u.toString(), { margin: 1, width: 96 }).then(setQr).catch(() => {});
+  }, [topic]);
 
   const restore = async () => {
     setBusy(true);

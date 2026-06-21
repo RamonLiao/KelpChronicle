@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ConnectButton } from '@mysten/dapp-kit-react/ui';
 import { useCurrentAccount } from '@mysten/dapp-kit-react';
 import { useQuery } from '@tanstack/react-query';
@@ -12,8 +12,22 @@ import { api, type RunResult } from './lib/api.ts';
 
 const DEFAULT_TOPIC = 'Walrus ecosystem';
 
+// topic lives in the URL (?topic=) so the QR / shared link opens the SAME memory on another
+// device — the cross-device persistence promise breaks if topic stays only in React state.
+function initialTopic() {
+  if (typeof window === 'undefined') return DEFAULT_TOPIC;
+  return new URLSearchParams(window.location.search).get('topic') || DEFAULT_TOPIC;
+}
+
 export default function App() {
-  const [topic, setTopic] = useState(DEFAULT_TOPIC);
+  const [topic, setTopic] = useState(initialTopic);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const u = new URL(window.location.href);
+    u.searchParams.set('topic', topic);
+    window.history.replaceState(null, '', u);
+  }, [topic]);
   const [live, setLive] = useState<RunResult | null>(null);
   const [selected, setSelected] = useState<KelpNode | null>(null);
   const [clearedLocally, setClearedLocally] = useState(false);
@@ -64,7 +78,7 @@ export default function App() {
 
       <RunConsole topic={topic} setTopic={setTopic} onResult={(r) => { setClearedLocally(false); setLive(r); memory.refetch(); }} />
       <Inspector node={selected} />
-      <MemoryRestore artifacts={artifacts} onClearLocal={() => { setClearedLocally(true); setSelected(null); }}
+      <MemoryRestore artifacts={artifacts} topic={topic} onClearLocal={() => { setClearedLocally(true); setSelected(null); }}
         onRestored={() => { setClearedLocally(false); memory.refetch(); }} />
     </div>
   );
