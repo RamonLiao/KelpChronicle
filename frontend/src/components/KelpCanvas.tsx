@@ -37,6 +37,8 @@ export function KelpCanvas({ graph, onNodeClick, pulseToRunId }: {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const simRef = useRef<Simulation<SimNode, SimLink> | null>(null);
   const hoverRef = useRef<SimNode | null>(null);
+  const focusRef = useRef<SimNode | null>(null); // keyboard-focused node (arrow-key roving)
+  const liveRef = useRef<HTMLDivElement>(null); // sr-only aria-live region for AT announcements
   const mouseRef = useRef<{ x: number; y: number }>({ x: -1e4, y: -1e4 }); // screen-space cursor
   const pulseRef = useRef<{ runId: number; start: number } | null>(null);
   // camera persists across graph rebuilds so panning/zoom isn't reset when /memory refetches.
@@ -52,6 +54,7 @@ export function KelpCanvas({ graph, onNodeClick, pulseToRunId }: {
   useEffect(() => {
     const canvas = canvasRef.current!; const dpr = window.devicePixelRatio || 1;
     const cam = camRef.current;
+    focusRef.current = null; // stale node refs don't survive a graph rebuild
 
     const nodes: SimNode[] = graph.nodes.map((n) => ({ ...n, x: innerWidth / 2 + Math.random() * 40, y: innerHeight / 2 }));
     const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -191,6 +194,14 @@ export function KelpCanvas({ graph, onNodeClick, pulseToRunId }: {
         ctx.fill(); ctx.shadowBlur = 0;
       }
 
+      // keyboard-focus ring (world space) — visible focus indicator for arrow-key navigation
+      const foc = focusRef.current;
+      if (foc) {
+        ctx.beginPath(); ctx.arc(foc.x, foc.y, (foc.kind === 'run' ? 7 : 5) + 6, 0, Math.PI * 2);
+        ctx.strokeStyle = COL.cyan; ctx.lineWidth = 2 / cam.scale; ctx.setLineDash([4 / cam.scale, 3 / cam.scale]);
+        ctx.stroke(); ctx.setLineDash([]);
+      }
+
       // --- screen-space overlay: hover tooltip ---
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const hov = hoverRef.current;
@@ -265,12 +276,36 @@ export function KelpCanvas({ graph, onNodeClick, pulseToRunId }: {
       cam.ty = e.clientY - w.y * ns;
     };
     const onLeave = () => { hoverRef.current = null; down = null; };
+
+    // keyboard navigation: arrow keys rove through nodes, Enter/Space inspects, Esc clears.
+    // Tab is left untouched so page tab-order still works. Roving order: runs first, then findings.
+    const kbOrder = nodes.slice().sort((a, b) =>
+      a.kind !== b.kind ? (a.kind === 'run' ? -1 : 1) : a.runId - b.runId || a.id.localeCompare(b.id));
+    let focusIdx = -1;
+    const focusAt = (i: number) => {
+      focusIdx = ((i % kbOrder.length) + kbOrder.length) % kbOrder.length; // safe wrap for any i
+      const n = kbOrder[focusIdx]; focusRef.current = n;
+      cam.tx = innerWidth / 2 - n.x * cam.scale; cam.ty = innerHeight / 2 - n.y * cam.scale; // center it
+      const desc = n.kind === 'run' ? `Run ${n.runId}` : `Finding: ${n.label}`;
+      if (liveRef.current) liveRef.current.textContent = `${desc}. ${focusIdx + 1} of ${kbOrder.length}. Press Enter to inspect.`;
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (!kbOrder.length) return;
+      switch (e.key) {
+        case 'ArrowRight': case 'ArrowDown': e.preventDefault(); focusAt(focusIdx + 1); break;
+        case 'ArrowLeft': case 'ArrowUp': e.preventDefault(); focusAt(focusIdx - 1); break;
+        case 'Enter': case ' ': if (focusRef.current) { e.preventDefault(); onNodeClick(focusRef.current); } break;
+        case 'Escape': focusIdx = -1; focusRef.current = null; if (liveRef.current) liveRef.current.textContent = ''; break;
+      }
+    };
+
     canvas.style.cursor = 'grab';
     canvas.addEventListener('mousedown', onDown);
     canvas.addEventListener('mousemove', onMove);
     canvas.addEventListener('mouseup', onUp);
     canvas.addEventListener('mouseleave', onLeave);
     canvas.addEventListener('wheel', onWheel, { passive: false });
+    canvas.addEventListener('keydown', onKey);
 
     return () => {
       cancelAnimationFrame(raf); sim.stop(); window.removeEventListener('resize', resize);
@@ -279,21 +314,29 @@ export function KelpCanvas({ graph, onNodeClick, pulseToRunId }: {
       canvas.removeEventListener('mouseup', onUp);
       canvas.removeEventListener('mouseleave', onLeave);
       canvas.removeEventListener('wheel', onWheel);
+      canvas.removeEventListener('keydown', onKey);
     };
   }, [graph, onNodeClick]);
 
   // canvas is a replaced element: `inset:0` alone won't size it — `width:auto` falls back to the
   // intrinsic bitmap size (innerWidth*dpr), so on HiDPI screens it renders at 2× and the forest
   // draws off-viewport. Pin the CSS box to the viewport; the bitmap stays dpr-scaled for sharpness.
-  // a11y: the force-graph is canvas-rendered so it's inherently pointer-driven; label it for AT.
-  // TODO(a11y): keyboard node traversal + Inspector open without a mouse (deferred — needs a focusable
-  // node list, e.g. surfacing run/finding nodes as buttons in a panel).
+  // a11y: canvas is pointer-driven, so it's also made focusable with arrow-key node roving + an
+  // aria-live region announcing the focused node. Tab reaches it; arrows move; Enter inspects.
   return (
-    <canvas
-      ref={canvasRef}
-      role="img"
-      aria-label="Kelp forest memory graph — pan by dragging, zoom with the scroll wheel, click a node to inspect"
-      style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh', display: 'block' }}
-    />
+    <>
+      <canvas
+        ref={canvasRef}
+        tabIndex={0}
+        role="application"
+        aria-label="Kelp forest memory graph. Drag to pan, scroll to zoom, click a node to inspect. Use arrow keys to move between nodes and Enter to inspect."
+        style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh', display: 'block' }}
+      />
+      <div
+        ref={liveRef}
+        aria-live="polite"
+        style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}
+      />
+    </>
   );
 }
