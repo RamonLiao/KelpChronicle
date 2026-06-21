@@ -46,6 +46,22 @@ test('fresh: live findings whose key is new are fresh; live run node is fresh', 
   assert.equal(runNode?.digest, '0xdig');
 });
 
+test('attestation map backfills blobId/digest onto historical run nodes', () => {
+  const g = projectGraph([mk(1, ['a'])], null, { '1': { blobId: 'bb', digest: '0xdd' } });
+  const run = g.nodes.find((n) => n.id === 'run:1');
+  assert.equal(run?.blobId, 'bb');
+  assert.equal(run?.digest, '0xdd');
+});
+
+test('live result takes precedence over attestation backfill', () => {
+  const liveArtifact = mk(2, ['c']);
+  const live: RunResult = { artifact: liveArtifact, blobId: 'liveBlob', attestationDigest: '0xlive', knownHit: 0, freshCount: 1 };
+  const g = projectGraph([liveArtifact], live, { '2': { blobId: 'stale', digest: '0xstale' } });
+  const run = g.nodes.find((n) => n.id === 'run:2');
+  assert.equal(run?.blobId, 'liveBlob');
+  assert.equal(run?.digest, '0xlive');
+});
+
 test('without live, no node is fresh and no blobId/digest set', () => {
   const g = projectGraph([mk(1, ['a'])]);
   assert.ok(g.nodes.every((n) => n.fresh === false));

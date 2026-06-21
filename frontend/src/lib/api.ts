@@ -30,6 +30,9 @@ export function makeApi(base: string, fetchImpl: typeof fetch = fetch) {
       }).then((r) => unwrap<RunResult>(r)),
     getMemory: (topic: string) =>
       fetchImpl(`${base}/memory?topic=${encodeURIComponent(topic)}`).then((r) => unwrap<Artifact[]>(r)),
+    getAttestations: (agent: string, namespace: string) =>
+      fetchImpl(`${base}/attestations?agent=${encodeURIComponent(agent)}&namespace=${encodeURIComponent(namespace)}`)
+        .then((r) => unwrap<Record<string, { blobId: string; digest: string }>>(r)),
     restore: () =>
       fetchImpl(`${base}/restore`, { method: 'POST' }).then((r) => unwrap<{ ok: true }>(r)),
   };

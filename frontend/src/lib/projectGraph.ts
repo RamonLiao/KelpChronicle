@@ -8,7 +8,11 @@ export interface KelpNode {
 export interface KelpEdge { source: string; target: string; kind: 'membership' | 'lineage'; }
 export interface KelpGraph { nodes: KelpNode[]; edges: KelpEdge[]; }
 
-export function projectGraph(artifacts: Artifact[], live?: RunResult | null): KelpGraph {
+export function projectGraph(
+  artifacts: Artifact[],
+  live?: RunResult | null,
+  attestations: Record<string, { blobId: string; digest: string }> = {},
+): KelpGraph {
   const liveRunId = live?.artifact.runId;
   // keys known from any NON-live artifact — used to decide freshness of live findings.
   const knownKeys = new Set<string>();
@@ -27,6 +31,12 @@ export function projectGraph(artifacts: Artifact[], live?: RunResult | null): Ke
       fresh: a.runId === liveRunId, createdAtMs: a.createdAtMs,
     };
     if (a.runId === liveRunId && live) { runNode.blobId = live.blobId; runNode.digest = live.attestationDigest; }
+    // backfill historical run nodes from the on-chain attestation index (live result wins).
+    const att = attestations[String(a.runId)];
+    if (att) {
+      if (runNode.blobId === undefined) runNode.blobId = att.blobId;
+      if (runNode.digest === undefined) runNode.digest = att.digest;
+    }
     nodes.set(runNode.id, runNode);
 
     for (const f of a.findings) {
