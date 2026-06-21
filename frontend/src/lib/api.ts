@@ -10,7 +10,8 @@ export interface RunResult {
 }
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string) { super(message); this.name = 'ApiError'; }
+  status: number;
+  constructor(status: number, message: string) { super(message); this.name = 'ApiError'; this.status = status; }
 }
 
 async function unwrap<T>(res: Response): Promise<T> {
