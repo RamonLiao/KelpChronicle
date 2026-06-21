@@ -4,9 +4,11 @@ type Rect = { x: number; y: number; w: number; h: number };
 type Stored = Rect & { collapsed: boolean };
 
 function loadAll(): Record<string, Stored> {
+  if (typeof localStorage === 'undefined') return {};
   try { return JSON.parse(localStorage.getItem('recall_panels') ?? '{}'); } catch { return {}; }
 }
 function saveOne(id: string, s: Stored) {
+  if (typeof localStorage === 'undefined') return;
   const all = loadAll(); all[id] = s; localStorage.setItem('recall_panels', JSON.stringify(all));
 }
 

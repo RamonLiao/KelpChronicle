@@ -32,23 +32,35 @@ export function KelpCanvas({ graph, onNodeClick, pulseToRunId }: {
   // (re)build simulation when graph identity changes
   useEffect(() => {
     const canvas = canvasRef.current!; const dpr = window.devicePixelRatio || 1;
-    const resize = () => { canvas.width = innerWidth * dpr; canvas.height = innerHeight * dpr; };
-    resize(); window.addEventListener('resize', resize);
 
     const nodes: SimNode[] = graph.nodes.map((n) => ({ ...n, x: innerWidth / 2 + Math.random() * 40, y: innerHeight / 2 }));
     const byId = new Map(nodes.map((n) => [n.id, n]));
     const links: SimLink[] = graph.edges
       .map((e) => ({ source: byId.get(e.source)!, target: byId.get(e.target)!, kind: e.kind }))
       .filter((l) => l.source && l.target);
-    nodes.filter((n) => n.kind === 'run').forEach((n) => { n.fy = innerHeight - 80 - n.runId * 6; }); // seabed anchoring
+
+    const seabedY = () => innerHeight - 80;
+    const anchorRuns = () => nodes.filter((n) => n.kind === 'run').forEach((n) => { n.fy = seabedY() - n.runId * 6; });
+    anchorRuns(); // seabed anchoring
 
     const sim = forceSimulation<SimNode, SimLink>(nodes)
       .force('link', forceLink<SimNode, SimLink>(links).id((d) => d.id).distance(70).strength(0.6))
       .force('charge', forceManyBody().strength(-120))
       .force('x', forceX(innerWidth / 2).strength(0.03))
-      .force('y', forceY((d: any) => (d.kind === 'finding' ? innerHeight * 0.35 : innerHeight - 80)).strength(0.05));
+      .force('y', forceY((d: any) => (d.kind === 'finding' ? innerHeight * 0.35 : seabedY())).strength(0.05));
     sim.alphaTarget(0.02).restart(); // keep a faint jitter so the forest never fully freezes
     simRef.current = sim;
+
+    // resize: re-fit canvas bitmap AND re-anchor the forest to the new viewport
+    // (otherwise the layout stays pinned to the old dimensions and drifts off-screen).
+    const resize = () => {
+      canvas.width = innerWidth * dpr; canvas.height = innerHeight * dpr;
+      sim.force('x', forceX(innerWidth / 2).strength(0.03));
+      sim.force('y', forceY((d: any) => (d.kind === 'finding' ? innerHeight * 0.35 : seabedY())).strength(0.05));
+      anchorRuns();
+      sim.alpha(0.3).restart();
+    };
+    resize(); window.addEventListener('resize', resize);
 
     // marine snow seeded once per (re)build
     const particles: Particle[] = Array.from({ length: 40 }, () => ({

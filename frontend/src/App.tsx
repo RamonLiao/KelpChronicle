@@ -51,6 +51,17 @@ export default function App() {
         </div>
       )}
 
+      {/* non-destructive error notice when a refetch fails but stale nodes remain on screen (spec §4) */}
+      {memory.isError && graph.nodes.length > 0 && (
+        <div className="mono" style={{
+          position: 'fixed', top: 56, left: '50%', transform: 'translateX(-50%)', zIndex: 10,
+          fontSize: 11, color: 'var(--amber)', background: 'rgba(235,179,82,0.07)',
+          border: '1px solid rgba(235,179,82,0.4)', borderRadius: 7, padding: '5px 12px', pointerEvents: 'none',
+        }}>
+          ⚠ Memory service unavailable — showing last known forest.
+        </div>
+      )}
+
       <RunConsole topic={topic} setTopic={setTopic} onResult={(r) => { setClearedLocally(false); setLive(r); memory.refetch(); }} />
       <Inspector node={selected} />
       <MemoryRestore artifacts={artifacts} onClearLocal={() => { setClearedLocally(true); setSelected(null); }}
