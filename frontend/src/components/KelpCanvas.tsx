@@ -231,6 +231,39 @@ export function KelpCanvas({ graph, onNodeClick, pulseToRunId }: {
         ctx.fillText(sub, bx + pad, by + 29);
       }
 
+      // --- floating annotation chips (spec mockup): trust badges anchored to nodes ---
+      // data-gated honesty: blobId -> "Stored on Walrus", digest -> "Verified on-chain",
+      // fresh delta finding -> "fresh". Run trunks (few) always show; fresh chips capped to
+      // avoid clutter on a 30-finding first run.
+      ctx.font = '11px "Spline Sans Mono", ui-monospace, monospace';
+      const AMBER = '#EBB352';
+      const roundRectFn = typeof (ctx as any).roundRect === 'function';
+      const drawChip = (nx: number, ny: number, slot: number, text: string, color: string, glow: boolean) => {
+        const padX = 8, h = 20, gap = 6;
+        const w = ctx.measureText(text).width + padX * 2;
+        const cx = nx + 16, cy = ny - 16 - h - slot * (h + gap);
+        ctx.globalAlpha = 0.5; ctx.strokeStyle = color; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(nx, ny); ctx.lineTo(cx, cy + h / 2); ctx.stroke(); ctx.globalAlpha = 1;
+        ctx.beginPath();
+        if (roundRectFn) (ctx as any).roundRect(cx, cy, w, h, 10); else ctx.rect(cx, cy, w, h);
+        ctx.fillStyle = 'rgba(7,30,34,0.85)'; ctx.fill();
+        if (glow) { ctx.shadowBlur = 8; ctx.shadowColor = color; }
+        ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.stroke(); ctx.shadowBlur = 0;
+        ctx.fillStyle = color; ctx.fillText(text, cx + padX, cy + 14);
+      };
+      let freshShown = 0;
+      for (const n of nodes) {
+        const sx = n.x * cam.scale + cam.tx, sy = n.y * cam.scale + cam.ty;
+        if (sx < -60 || sx > innerWidth + 60 || sy < -60 || sy > innerHeight + 60) continue; // cull offscreen
+        let slot = 0;
+        if (n.kind === 'run') {
+          if (n.blobId) drawChip(sx, sy, slot++, 'Stored on Walrus', AMBER, true);
+          if (n.digest) drawChip(sx, sy, slot++, 'Verified on-chain', COL.cyan, true);
+        } else if (n.fresh && freshShown < 5) {
+          drawChip(sx, sy, 0, 'fresh', COL.cyan, true); freshShown++;
+        }
+      }
+
       raf = requestAnimationFrame(render);
     };
     raf = requestAnimationFrame(render);
