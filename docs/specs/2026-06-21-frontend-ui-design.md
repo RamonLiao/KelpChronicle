@@ -3,7 +3,12 @@
 > Status: Approved direction (2026-06-21). Branding per `2026-06-20-branding-design.md` (KelpChronicle / kelp-forest). API shapes per `backend/src/routes.ts` + `shared/src/artifact.ts`.
 > Scope: the dApp frontend (Tasks 11–14 surface). Backend endpoints already shipped (Task 10).
 
+![KelpChronicle HUD Dashboard Mockup](./kelp_hud_dashboard_v1.png)
+
+> Mockup = **aesthetic target** for the *procedural* renderer, NOT a static background asset. The lush kelp must be drawn programmatically from data (see §3 — "Procedural Seaweed"). The Inspector's ledger fields in the image (`process/stopped/stambled/…`) are AI filler — real fields are runId / blobId / digest / epoch / relevance (§2).
+
 ---
+
 
 ## 1. North Star & Architecture
 
@@ -53,9 +58,9 @@ Direction: **Botanical Deep-Sea Chronicle** — a living field journal / herbari
 - Only two elements glow: `Stored on Walrus` (amber) and `Verified on-chain` / fresh-delta finding nodes (cyan).
 - Everything else — known kelp nodes, recalled-status chips, panels, text — is **matte**. This is what makes the verification moment pop instead of mushing into uniform neon.
 
-**Atmosphere over flat glass:** abyssal radial-gradient background + subtle SVG grain overlay (≈0.5 opacity, overlay blend) + one slow drifting caustic light cone (14s ease loop). HUD panels use restrained `blur(3px)` glass, not heavy frosted glass.
+**Atmosphere over flat glass:** abyssal radial-gradient background + subtle SVG grain overlay (≈0.5 opacity, overlay blend) + one slow drifting caustic light cone (14s ease loop) + slow upward-drifting abyssal marine snow particles (low opacity `0.05 - 0.1` floating snow to add a breathing environment). HUD panels use restrained `blur(3px)` glass, not heavy frosted glass.
 
-**Motion budget:** spend it on the signature growth animation (seabed→canopy staggered reveal on restore, idle sine sway on tendrils), not scattered micro-interactions.
+**Motion budget:** spend it on the signature biological growth animation and the fluid current sway physics on the main canvas, ensuring the entire kelp forest feels alive.
 
 Reference style tile: `.superpowers/brainstorm/*/content/style-tile.html` (not committed — gitignored). Palette/fonts above are the source of truth.
 
@@ -88,10 +93,16 @@ Explorer link format: `https://testnet.suivision.xyz/txblock/{attestationDigest}
 
 **Engine:**
 - Layout via `d3-force` (+ `d3-quadtree`); rendered on a 2D `<canvas>` (stable >50 nodes vs SVG/DOM; demo stays smooth). Chosen over react-flow (a node-editor — fighting it for generative-art styling costs more than it saves).
-- **Growth animation:** new fresh node emerges from its parent run's position → springs to its force-resolved spot. Edges are slightly-curved quadratic Béziers (organic tendrils), not straight lines.
-- **Pulse:** on recall/restore, a cyan bioluminescent gradient runs along edges from seabed run → fresh buds.
-- **Exit (① Clear):** nodes retract toward seabed + fade.
-- **Interaction:** hover enlarges + mini tooltip (blobId / epoch / relevance); click opens Inspector.
+- **Procedural Seaweed — "data IS the kelp" (decision 2026-06-21):** there is NO static painted background. Every visible kelp strand is a run; every bud is a finding; the whole forest is drawn programmatically from the `/memory` projection so growth maps 1:1 to data (matches branding spec: "force-directed graph *styled to look like* seaweed"). To approach the mockup's density, each stem bezier renders procedural fronds/leaves along its length (instanced leaf sprites or parametric curves), count scaling with the run's finding count. **This is the primary art risk** — if procedural lushness underwhelms in the demo, fallback = increase frond density + hand-tuned SVG leaf sprites instanced along stems (still data-driven, no decorative-only layer). Atmosphere layers (grain, caustic cone, marine snow) remain non-data ambiance behind the kelp.
+- **Fluid Current Sway (洋流動力學)**: The entire kelp stem structure is dynamic. The canvas animation loop applies a sine wave sway function (`y_sway = Math.sin(time * frequency + node_depth * phase_offset) * amplitude`) to the bezier control points. Nodes attached further up the branch (shallower depth) lag behind the base, creating a natural, fluid wave propagation along the seaweed.
+- **Interactive Mouse Sway (滑鼠力場微幅搖擺)**: The mouse cursor position $(x_m, y_m)$ represents a subtle local current. The cursor remains standard/default with no flashy particles or large visual effects. When the mouse moves, nodes and kelp stem control points within a radius of 120px experience a highly-dampened, gentle offset (`offset = (1 - distance/120) * 0.15 * max_offset * sin(time)`). This makes the seaweed sway dynamically on hover, but keeps nodes stable enough for easy user interaction (hover & click) without the nodes "fleeing" from the pointer.
+- **Budding Growth (孢子綻放生長)**: When new delta findings are rendered:
+  1. Stems (tendrils) grow outward using path length interpolation (dasharray style).
+  2. New bud nodes scale up from `0` to `1` using an elastic easing function (`cubic-bezier(0.34, 1.56, 0.64, 1)`).
+  3. A temporary bioluminescent pulse surges into the new node, lighting it up to `cyan-spark` while older nodes fade smoothly into matte kelp green.
+- **Memory Retrieval Pulse (流光脈衝)**: When `recall` is triggered, a packet of light (a small glowing arc/dot) travels from the root seabed run node up the curved stem bezier path to the target node, visualising the data retrieval.
+- **Exit (① Clear)**: Nodes smoothly retract back along their parent stems toward the seabed and fade (`opacity -> 0`).
+- **Interaction**: Hover triggers a gentle node expansion + mini-tooltip (showing epoch, relevance, blobId); click opens the right-hand Inspector.
 
 ---
 
