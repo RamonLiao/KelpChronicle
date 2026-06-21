@@ -84,3 +84,24 @@ earlier codex namespace/agent-filter finding (account-scoped private namespace).
 - [ ] Per-principal/IP rate-limit + per-run gas budget / signer circuit-breaker.
 - [ ] `/memory`: pass authenticated agent as a mandatory filter into `recallArtifacts`
       (or per-agent MemWal namespace); reject wildcard/empty topic without agent scope.
+
+## Frontend Task 14: multi-wallet memory↔attestation scoping mismatch (demo-tolerated) — 2026-06-21
+
+Dual-review (codex Round 1, finding #3) flagged: `App.tsx` queries `/attestations`
+with the **connected wallet** (`account.address`), but `/memory` is **topic-scoped,
+not agent-scoped**. If the wallet switches while topic-based artifacts from a prior
+agent are still on screen, `projectGraph` can backfill agent B's `digest/blobId`
+onto agent A's run node (attestations keyed by `runId`, which is a per-agent/namespace
+counter → collisions possible across agents).
+
+**Why tolerated for the demo:** same root cause + same disposition as the Task 10
+auth gap — demo is single-operator / single-wallet, `/memory` is not agent-scoped
+by design yet. No wrong data surfaces with one wallet.
+
+**MUST-FIX before public/multi-tenant deployment** (couples with Task 10 fix):
+- [ ] Make `/memory` agent-scoped (per-agent MemWal namespace or mandatory agent
+      filter), so artifacts and attestations always share one agent. Then the
+      frontend mismatch disappears for free.
+- [ ] Until then, frontend could guard by filtering `artifacts` to
+      `a.agent === account.address` before projection — cheap, but only meaningful
+      once `/memory` returns multiple agents' data.
