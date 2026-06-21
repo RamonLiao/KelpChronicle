@@ -105,3 +105,34 @@ by design yet. No wrong data surfaces with one wallet.
 - [ ] Until then, frontend could guard by filtering `artifacts` to
       `a.agent === account.address` before projection — cheap, but only meaningful
       once `/memory` returns multiple agents' data.
+
+## `/attestations` multi-tenant scan cap: no backend-only fix exists — 2026-06-22
+
+`attestIndex.ts` lists frozen `RunAttestation` objects via indexer GraphQL
+`objects(filter:{type})`, then filters by agent+namespace **client-side** and
+throws (Rule 12, fail loud) when a multi-agent dataset exceeds the
+`PAGE_SIZE*MAX_PAGES = 1000`-object scan cap. This session investigated removing
+that ceiling and concluded **there is no backend-only quick fix**:
+
+- **GraphQL can't filter by the fields we need.** `objects` filter only accepts
+  `type`/`owner`; `RunAttestation` is frozen (no owner). The contract *does* emit
+  an `Attested` event, but `events` filter only accepts `eventType`/`sender`/
+  `emittingModule`/`transactionDigest` — **not arbitrary event fields** like
+  `agent`. The event also omits `namespace` and `walrus_blob_id`, so even an
+  event sweep can't serve the index without joining back to the object. With one
+  shared signer for all agents, `sender` doesn't narrow by agent either.
+- **The package is Immutable** (no UpgradeCap) → the Move module can't be amended
+  to add an on-chain index.
+
+Upgrade paths (each is a real project, **not** a backend touch-up):
+
+| Path | What | Cost |
+|---|---|---|
+| A. Move registry | New package + shared `Table<(agent,namespace)→ID[]>`; `attest` writes the table; query becomes a point-lookup | Move redesign **+ redeploy** (immutable pkg ⇒ new attestation type + migration). Run through SUI skills, not "backend". |
+| B. Off-chain indexer | Backend maintains its own cache/DB (periodic GraphQL sweep or event subscription joined to objects); queries hit the cache | Real backend work, but introduces stateful + consistency surface; initial sweep still O(N) under the cap, just amortized. |
+
+**Disposition: deferred (no code this session).** Same rationale as the Task 10
+auth gap — the demo is single-agent, this is explicitly **non-blocking**, and
+either fix is disproportionate (Rule 2) to a need the demo doesn't exercise. The
+current fail-loud throw is the correct behavior until a real multi-tenant
+deployment picks path A or B.
