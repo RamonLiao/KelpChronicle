@@ -30,6 +30,37 @@ Consequences:
 
 ---
 
+## 1.5 Visual Language (frontend-design review, 2026-06-21)
+
+Direction: **Botanical Deep-Sea Chronicle** — a living field journal / herbarium, NOT a neon sci-fi aquarium. Keeps the branding spec's core metaphors (kelp forest, seabed anchoring, growth animation, two trust badges) but corrects three AI-slop traps surfaced in review: generic fonts, undisciplined glow, flat glass.
+
+**Typography (Inter is banned):**
+- Display: **Fraunces** (italic, optical-sizing axis — organic softness echoes kelp; serves the *Chronicle* concept). Used for logo, headings, empty-state copy.
+- Data / ledger: **Spline Sans Mono** — all on-chain/Walrus data (blobId, attestation digest, epoch, relevance, runId) renders monospace for "scientific ledger" credibility. Also used for eyebrows/labels.
+
+**Palette (herbarium, not radioactive) — lock these:**
+```
+--abyss:    #05090c   /* background base */
+--abyss2:   #0e2026   /* deep-teal depth gradient */
+--kelp:     #5f8f6e   /* anchored memory nodes (matte, desaturated) */
+--kelp-lit: #7fb894   /* display-italic accent */
+--herb:     #8aa38f   /* secondary botanical text */
+--amber:    #d9a441   /* Stored on Walrus — warm bioluminescence */
+--cyan:     #3fd6e8   /* the SINGLE sharp spark: Verified on-chain + fresh delta */
+```
+
+**Glow economy (the key discipline):** glow is *earned*, not ambient.
+- Only two elements glow: `Stored on Walrus` (amber) and `Verified on-chain` / fresh-delta finding nodes (cyan).
+- Everything else — known kelp nodes, recalled-status chips, panels, text — is **matte**. This is what makes the verification moment pop instead of mushing into uniform neon.
+
+**Atmosphere over flat glass:** abyssal radial-gradient background + subtle SVG grain overlay (≈0.5 opacity, overlay blend) + one slow drifting caustic light cone (14s ease loop). HUD panels use restrained `blur(3px)` glass, not heavy frosted glass.
+
+**Motion budget:** spend it on the signature growth animation (seabed→canopy staggered reveal on restore, idle sine sway on tendrils), not scattered micro-interactions.
+
+Reference style tile: `.superpowers/brainstorm/*/content/style-tile.html` (not committed — gitignored). Palette/fonts above are the source of truth.
+
+---
+
 ## 2. Layout — A: Full-bleed Canvas + Windowed HUD
 
 The kelp-forest canvas fills the viewport. Control surfaces are independent glass windows over it, each with: drag handle, resize corner, collapse button. Position/size persisted to localStorage key `recall_panels`. Default layout: Console top-left, Inspector right, Memory/Restore bottom-left — user can move/resize/collapse freely so panels never block the graph.
