@@ -4,12 +4,14 @@
 import { isValidSuiAddress, normalizeSuiAddress } from '@mysten/sui/utils';
 import { runAgent, type RunResult } from './run.js';
 import { recallArtifacts, restoreMemory } from './memory.js';
+import { makeAttestIndex } from './attestIndex.js';
 import type { Artifact } from '../../shared/src/artifact.js';
 
 export interface RouteDeps {
   run: (topic: string, agent: string, nowMs: number) => Promise<RunResult>;
   recall: (query: string) => Promise<Artifact[]>;
   restore: () => Promise<void>;
+  attestIndex: (agent: string, namespace: string) => Promise<Record<string, { blobId: string; digest: string }>>;
   now: () => number;
 }
 
@@ -25,6 +27,7 @@ export function makeRoutes(deps: Partial<RouteDeps> = {}) {
   const run = deps.run ?? runAgent;
   const recall = deps.recall ?? recallArtifacts;
   const restore = deps.restore ?? restoreMemory;
+  const attestIndex = deps.attestIndex ?? makeAttestIndex();
   const now = deps.now ?? (() => Date.now());
   let inFlight = false; // single-flight: serializes the one signer (avoids gas-coin equivocation)
 
@@ -62,6 +65,19 @@ export function makeRoutes(deps: Partial<RouteDeps> = {}) {
       } catch (e) {
         console.error('[/memory] failed:', e);
         return { status: 502, body: { error: 'memory service error' } };
+      }
+    },
+
+    async attestationsHandler(input: { agent?: unknown; namespace?: unknown }): Promise<RouteResult> {
+      const agent = normalizeSuiAddress(String(input?.agent ?? '').trim());
+      if (!isValidSuiAddress(agent) || agent === ZERO_ADDRESS) {
+        return { status: 400, body: { error: 'invalid agent address' } };
+      }
+      try {
+        return { status: 200, body: await attestIndex(agent, String(input?.namespace ?? '')) };
+      } catch (e) {
+        console.error('[/attestations] failed:', e);
+        return { status: 502, body: { error: 'attestation index error' } };
       }
     },
 

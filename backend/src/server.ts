@@ -20,6 +20,11 @@ app.get('/memory', async (req, res) => {
   res.status(status).json(body);
 });
 
+app.get('/attestations', async (req, res) => {
+  const { status, body } = await routes.attestationsHandler({ agent: req.query?.agent, namespace: req.query?.namespace });
+  res.status(status).json(body);
+});
+
 app.post('/restore', async (_req, res) => {
   const { status, body } = await routes.restoreHandler();
   res.status(status).json(body);
