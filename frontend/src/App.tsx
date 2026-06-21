@@ -31,6 +31,15 @@ export default function App() {
   const [live, setLive] = useState<RunResult | null>(null);
   const [selected, setSelected] = useState<KelpNode | null>(null);
   const [clearedLocally, setClearedLocally] = useState(false);
+  // view preference (UI-only): persist whether the floating trust badges are shown. localStorage
+  // holds prefs only, never memory data. Default on — badges are the demo's honesty headline.
+  const [showBadges, setShowBadges] = useState(() => {
+    try { return localStorage.getItem('recall_show_badges') !== '0'; } catch { return true; }
+  });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  useEffect(() => {
+    try { localStorage.setItem('recall_show_badges', showBadges ? '1' : '0'); } catch { /* ignore */ }
+  }, [showBadges]);
 
   const account = useCurrentAccount();
   const memory = useMemory(topic);
@@ -51,10 +60,33 @@ export default function App() {
 
   return (
     <div>
-      <KelpCanvas graph={graph} onNodeClick={setSelected} pulseToRunId={live?.artifact.runId ?? null} />
-      <header style={{ position: 'fixed', top: 0, left: 0, right: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', pointerEvents: 'none' }}>
+      <KelpCanvas graph={graph} onNodeClick={setSelected} pulseToRunId={live?.artifact.runId ?? null} showBadges={showBadges} />
+      <header style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', pointerEvents: 'none' }}>
         <span style={{ fontSize: 22 }}>Kelp<em style={{ color: 'var(--kelp-lit)' }}>Chronicle</em></span>
-        <div style={{ pointerEvents: 'auto' }}><ConnectButton /></div>
+        <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setSettingsOpen((o) => !o)}
+              aria-label="View settings" aria-expanded={settingsOpen} title="View settings"
+              style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--herb)', borderRadius: 8, width: 34, height: 34, cursor: 'pointer', fontSize: 15 }}
+            >⚙</button>
+            {settingsOpen && (
+              <div className="mono" style={{
+                position: 'absolute', top: 40, right: 0, width: 210, padding: 12, zIndex: 1000,
+                background: 'rgba(7,30,34,0.95)', border: '1px solid var(--border)', borderRadius: 10,
+                backdropFilter: 'blur(3px)', fontSize: 12, color: 'var(--herb)',
+              }}>
+                <div className="label" style={{ marginBottom: 8 }}>View</div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={showBadges} onChange={(e) => setShowBadges(e.target.checked)} />
+                  Show trust badges
+                </label>
+                <div style={{ marginTop: 6, fontSize: 10, opacity: 0.7 }}>Stored on Walrus / Verified on-chain chips. Hover a node to read it — badges fade automatically.</div>
+              </div>
+            )}
+          </div>
+          <ConnectButton />
+        </div>
       </header>
 
       {graph.nodes.length === 0 && (

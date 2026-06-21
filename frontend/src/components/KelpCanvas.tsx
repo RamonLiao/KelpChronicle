@@ -31,8 +31,8 @@ function drawLeaf(ctx: CanvasRenderingContext2D, x: number, y: number, screenAng
   ctx.restore();
 }
 
-export function KelpCanvas({ graph, onNodeClick, pulseToRunId }: {
-  graph: KelpGraph; onNodeClick: (n: KelpNode) => void; pulseToRunId?: number | null;
+export function KelpCanvas({ graph, onNodeClick, pulseToRunId, showBadges = true }: {
+  graph: KelpGraph; onNodeClick: (n: KelpNode) => void; pulseToRunId?: number | null; showBadges?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const simRef = useRef<Simulation<SimNode, SimLink> | null>(null);
@@ -43,6 +43,9 @@ export function KelpCanvas({ graph, onNodeClick, pulseToRunId }: {
   const pulseRef = useRef<{ runId: number; start: number } | null>(null);
   // camera persists across graph rebuilds so panning/zoom isn't reset when /memory refetches.
   const camRef = useRef<Camera>({ scale: 1, tx: 0, ty: 0 });
+  // read toggle via ref so flipping it doesn't rebuild the d3 sim (which would reset node positions).
+  const showBadgesRef = useRef(showBadges);
+  useEffect(() => { showBadgesRef.current = showBadges; }, [showBadges]);
 
   // sync pulse trigger without rebuilding the simulation
   useEffect(() => {
@@ -202,9 +205,51 @@ export function KelpCanvas({ graph, onNodeClick, pulseToRunId }: {
         ctx.stroke(); ctx.setLineDash([]);
       }
 
-      // --- screen-space overlay: hover tooltip ---
+      // --- screen-space overlays (chips first, then tooltip on top so it's never covered) ---
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const hov = hoverRef.current;
+
+      // --- floating annotation chips (spec mockup): trust badges anchored to nodes ---
+      // data-gated honesty: blobId -> "Stored on Walrus", digest -> "Verified on-chain",
+      // fresh delta finding -> "fresh". Run trunks (few) always show; fresh chips capped to
+      // avoid clutter on a 30-finding first run.
+      if (showBadgesRef.current) {
+        ctx.font = '11px "Spline Sans Mono", ui-monospace, monospace';
+        const AMBER = '#EBB352';
+        const roundRectFn = typeof (ctx as any).roundRect === 'function';
+        const hsx = hov ? hov.x * cam.scale + cam.tx : 0, hsy = hov ? hov.y * cam.scale + cam.ty : 0;
+        const drawChip = (nx: number, ny: number, slot: number, text: string, color: string, glow: boolean, fade: number) => {
+          const padX = 8, h = 20, gap = 6;
+          const w = ctx.measureText(text).width + padX * 2;
+          const cx = nx + 16, cy = ny - 16 - h - slot * (h + gap);
+          ctx.globalAlpha = 0.5 * fade; ctx.strokeStyle = color; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(nx, ny); ctx.lineTo(cx, cy + h / 2); ctx.stroke();
+          ctx.globalAlpha = fade;
+          ctx.beginPath();
+          if (roundRectFn) (ctx as any).roundRect(cx, cy, w, h, 10); else ctx.rect(cx, cy, w, h);
+          ctx.fillStyle = 'rgba(7,30,34,0.85)'; ctx.fill();
+          if (glow) { ctx.shadowBlur = 8; ctx.shadowColor = color; }
+          ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.stroke(); ctx.shadowBlur = 0;
+          ctx.fillStyle = color; ctx.fillText(text, cx + padX, cy + 14);
+          ctx.globalAlpha = 1;
+        };
+        let freshShown = 0;
+        for (const n of nodes) {
+          const sx = n.x * cam.scale + cam.tx, sy = n.y * cam.scale + cam.ty;
+          if (sx < -60 || sx > innerWidth + 60 || sy < -60 || sy > innerHeight + 60) continue; // cull offscreen
+          // fade ONLY chips near the hovered node so its tooltip is readable; distant badges stay.
+          const fade = hov && Math.hypot(sx - hsx, sy - hsy) < 180 ? 0.12 : 1;
+          let slot = 0;
+          if (n.kind === 'run') {
+            if (n.blobId) drawChip(sx, sy, slot++, 'Stored on Walrus', AMBER, true, fade);
+            if (n.digest) drawChip(sx, sy, slot++, 'Verified on-chain', COL.cyan, true, fade);
+          } else if (n.fresh && freshShown < 5) {
+            drawChip(sx, sy, 0, 'fresh', COL.cyan, true, fade); freshShown++;
+          }
+        }
+      }
+
+      // hover tooltip — drawn LAST so it's always on top of the chips, never covered
       if (hov) {
         const sx = hov.x * cam.scale + cam.tx;
         const sy = hov.y * cam.scale + cam.ty;
@@ -229,39 +274,6 @@ export function KelpCanvas({ graph, onNodeClick, pulseToRunId }: {
         ctx.fillText(title.length > 40 ? title.slice(0, 39) + '…' : title, bx + pad, by + 15);
         ctx.fillStyle = COL.herb;
         ctx.fillText(sub, bx + pad, by + 29);
-      }
-
-      // --- floating annotation chips (spec mockup): trust badges anchored to nodes ---
-      // data-gated honesty: blobId -> "Stored on Walrus", digest -> "Verified on-chain",
-      // fresh delta finding -> "fresh". Run trunks (few) always show; fresh chips capped to
-      // avoid clutter on a 30-finding first run.
-      ctx.font = '11px "Spline Sans Mono", ui-monospace, monospace';
-      const AMBER = '#EBB352';
-      const roundRectFn = typeof (ctx as any).roundRect === 'function';
-      const drawChip = (nx: number, ny: number, slot: number, text: string, color: string, glow: boolean) => {
-        const padX = 8, h = 20, gap = 6;
-        const w = ctx.measureText(text).width + padX * 2;
-        const cx = nx + 16, cy = ny - 16 - h - slot * (h + gap);
-        ctx.globalAlpha = 0.5; ctx.strokeStyle = color; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(nx, ny); ctx.lineTo(cx, cy + h / 2); ctx.stroke(); ctx.globalAlpha = 1;
-        ctx.beginPath();
-        if (roundRectFn) (ctx as any).roundRect(cx, cy, w, h, 10); else ctx.rect(cx, cy, w, h);
-        ctx.fillStyle = 'rgba(7,30,34,0.85)'; ctx.fill();
-        if (glow) { ctx.shadowBlur = 8; ctx.shadowColor = color; }
-        ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.stroke(); ctx.shadowBlur = 0;
-        ctx.fillStyle = color; ctx.fillText(text, cx + padX, cy + 14);
-      };
-      let freshShown = 0;
-      for (const n of nodes) {
-        const sx = n.x * cam.scale + cam.tx, sy = n.y * cam.scale + cam.ty;
-        if (sx < -60 || sx > innerWidth + 60 || sy < -60 || sy > innerHeight + 60) continue; // cull offscreen
-        let slot = 0;
-        if (n.kind === 'run') {
-          if (n.blobId) drawChip(sx, sy, slot++, 'Stored on Walrus', AMBER, true);
-          if (n.digest) drawChip(sx, sy, slot++, 'Verified on-chain', COL.cyan, true);
-        } else if (n.fresh && freshShown < 5) {
-          drawChip(sx, sy, 0, 'fresh', COL.cyan, true); freshShown++;
-        }
       }
 
       raf = requestAnimationFrame(render);
