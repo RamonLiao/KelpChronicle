@@ -26,6 +26,19 @@ test('duplicate finding key across runs is reused (one node), both runs link to 
   assert.equal(g.edges.filter((e) => e.target === 'finding:a' && e.kind === 'membership').length, 2);
 });
 
+// two artifacts can legitimately share a runId: a backfilled historical artifact and a
+// live-fetched one both carry runId 1. The projection must collapse them onto a single
+// run node (not emit a duplicate). This is the same shared-runId reality that forced the
+// MemoryRestore list to key by `${runId}-${createdAtMs}` instead of runId alone.
+test('two artifacts sharing a runId collapse to one run node; findings union', () => {
+  const g = projectGraph([mk(1, ['a', 'b']), mk(1, ['a', 'c'])]);
+  assert.equal(g.nodes.filter((n) => n.id === 'run:1').length, 1);
+  assert.equal(g.nodes.filter((n) => n.kind === 'finding').length, 3); // a,b,c unioned
+  // membership edges must also union — the repeated run:1->finding:a pair is emitted once,
+  // else d3 forceLink double-pulls finding:a and the retrieval pulse draws twice.
+  assert.equal(g.edges.filter((e) => e.kind === 'membership').length, 3); // a,b,c (a not doubled)
+});
+
 test('priorRunIds produce lineage edges; dangling priors skipped', () => {
   const g = projectGraph([mk(1, ['a']), mk(2, ['b'], ['1', '99'])]);
   const lineage = g.edges.filter((e) => e.kind === 'lineage');

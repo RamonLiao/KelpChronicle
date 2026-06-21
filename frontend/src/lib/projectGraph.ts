@@ -24,6 +24,15 @@ export function projectGraph(
   const runIds = new Set(artifacts.map((a) => a.runId));
   const nodes = new Map<string, KelpNode>();
   const edges: KelpEdge[] = [];
+  // two artifacts sharing a runId (backfill + live) repeat the same run->finding pairs;
+  // dedupe so d3 forceLink doesn't double-pull a node and the pulse doesn't draw twice.
+  const seenEdges = new Set<string>();
+  const addEdge = (e: KelpEdge) => {
+    const k = `${e.source}->${e.target}:${e.kind}`;
+    if (seenEdges.has(k)) return;
+    seenEdges.add(k);
+    edges.push(e);
+  };
 
   for (const a of artifacts) {
     const runNode: KelpNode = {
@@ -51,12 +60,12 @@ export function projectGraph(
           findingKey: f.key, summary: f.summary, sourceUrl: f.sourceUrl,
         });
       }
-      edges.push({ source: `run:${a.runId}`, target: id, kind: 'membership' });
+      addEdge({ source: `run:${a.runId}`, target: id, kind: 'membership' });
     }
 
     for (const pid of a.priorRunIds) {
       const n = Number(pid);
-      if (runIds.has(n)) edges.push({ source: `run:${a.runId}`, target: `run:${n}`, kind: 'lineage' });
+      if (runIds.has(n)) addEdge({ source: `run:${a.runId}`, target: `run:${n}`, kind: 'lineage' });
     }
   }
 

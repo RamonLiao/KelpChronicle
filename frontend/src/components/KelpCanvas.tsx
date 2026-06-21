@@ -157,5 +157,8 @@ export function KelpCanvas({ graph, onNodeClick, pulseToRunId }: {
     };
   }, [graph, onNodeClick]);
 
-  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, display: 'block' }} />;
+  // canvas is a replaced element: `inset:0` alone won't size it — `width:auto` falls back to the
+  // intrinsic bitmap size (innerWidth*dpr), so on HiDPI screens it renders at 2× and the forest
+  // draws off-viewport. Pin the CSS box to the viewport; the bitmap stays dpr-scaled for sharpness.
+  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh', display: 'block' }} />;
 }

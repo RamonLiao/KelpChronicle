@@ -27,7 +27,7 @@ export function MemoryRestore({ artifacts, topic, onClearLocal, onRestored }: {
       <div style={{ maxHeight: 90, overflow: 'auto', margin: '6px 0' }}>
         {artifacts.length === 0 && <div className="mono" style={{ fontSize: 11, color: 'var(--herb)' }}>none</div>}
         {[...artifacts].sort((a, b) => b.runId - a.runId).map((a) => (
-          <div key={a.runId} className="mono" style={{ fontSize: 11, padding: '3px 0', borderLeft: '2px solid var(--kelp)', paddingLeft: 6, marginBottom: 3 }}>
+          <div key={`${a.runId}-${a.createdAtMs}`} className="mono" style={{ fontSize: 11, padding: '3px 0', borderLeft: '2px solid var(--kelp)', paddingLeft: 6, marginBottom: 3 }}>
             Run #{a.runId} · {a.findings.length} findings
           </div>
         ))}
