@@ -40,18 +40,18 @@ Consequences:
 Direction: **Botanical Deep-Sea Chronicle** — a living field journal / herbarium, NOT a neon sci-fi aquarium. Keeps the branding spec's core metaphors (kelp forest, seabed anchoring, growth animation, two trust badges) but corrects three AI-slop traps surfaced in review: generic fonts, undisciplined glow, flat glass.
 
 **Typography (Inter is banned):**
-- Display: **Fraunces** (italic, optical-sizing axis — organic softness echoes kelp; serves the *Chronicle* concept). Used for logo, headings, empty-state copy.
+- Display: **Playfair Display** (high-contrast classic didone serif — best matches the mockup's archival-catalog title; serves the *Chronicle* concept). Used for logo, headings, empty-state copy. Italic for accents.
 - Data / ledger: **Spline Sans Mono** — all on-chain/Walrus data (blobId, attestation digest, epoch, relevance, runId) renders monospace for "scientific ledger" credibility. Also used for eyebrows/labels.
 
-**Palette (herbarium, not radioactive) — lock these:**
+**Palette (herbarium, not radioactive) — lock these (refined 2026-06-21):**
 ```
---abyss:    #05090c   /* background base */
---abyss2:   #0e2026   /* deep-teal depth gradient */
---kelp:     #5f8f6e   /* anchored memory nodes (matte, desaturated) */
---kelp-lit: #7fb894   /* display-italic accent */
---herb:     #8aa38f   /* secondary botanical text */
---amber:    #d9a441   /* Stored on Walrus — warm bioluminescence */
---cyan:     #3fd6e8   /* the SINGLE sharp spark: Verified on-chain + fresh delta */
+--abyss:    #020B0E   /* background base — solid, zero neon */
+--abyss2:   #071E22   /* deep-teal card/panel fill */
+--kelp:     #5C8F74   /* anchored memory nodes / passive stems+leaves (matte) */
+--kelp-lit: #7FB894   /* display-italic accent (lighter kelp tint) */
+--herb:     #9AB2A2   /* secondary botanical text / non-active metadata */
+--amber:    #EBB352   /* Stored on Walrus — soft warm gold glow */
+--cyan:     #4DE5F7   /* the SINGLE sharp spark: Verified on-chain + fresh-delta node */
 ```
 
 **Glow economy (the key discipline):** glow is *earned*, not ambient.
@@ -103,6 +103,7 @@ Explorer link format: `https://testnet.suivision.xyz/txblock/{attestationDigest}
 - **Memory Retrieval Pulse (流光脈衝)**: When `recall` is triggered, a packet of light (a small glowing arc/dot) travels from the root seabed run node up the curved stem bezier path to the target node, visualising the data retrieval.
 - **Exit (① Clear)**: Nodes smoothly retract back along their parent stems toward the seabed and fade (`opacity -> 0`).
 - **Interaction**: Hover triggers a gentle node expansion + mini-tooltip (showing epoch, relevance, blobId); click opens the right-hand Inspector.
+- **Glow on canvas (impl)**: set `ctx.shadowBlur = 10` + cyan shadow ONLY when drawing the fresh-delta node; all prior nodes draw with `shadowBlur = 0` (matte). This is the glow-economy rule (§1.5) at the draw-call level.
 
 ---
 
