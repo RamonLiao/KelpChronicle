@@ -150,6 +150,10 @@ export interface FetchDeps {
 
 export async function fetchCandidates(deps: FetchDeps = {}): Promise<Finding[]> {
   const fetchImpl = deps.fetchImpl ?? fetch;
+  // MUST stay `??`, never `||`: run.ts passes resolveSources()'s arrays, and an
+  // unmapped topic sends `repos: []` ON PURPOSE — it routes to search, not the
+  // default REPOS. `[] ?? REPOS` keeps the empty array; `[] || REPOS` would
+  // silently resurrect the curated default and break topic-aware discovery.
   const repos = deps.repos ?? REPOS;
   const rssFeeds = deps.rssFeeds ?? RSS_FEEDS;
   const out: Finding[] = [];
