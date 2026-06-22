@@ -68,9 +68,10 @@ export function resolveSources(topic: string): { repos: string[]; rssFeeds: stri
 - 保住現有 30-findings demo topic 走策展、穩定長葉。
 - 缺失 / 不存在的 repo 由 `fetchCandidates` 既有「per-source try/catch、skip 失敗」吸收，不致命。
 - **`CURATED_SOURCES` env 覆寫**：malformed JSON **fallback 回 seed list，不可 crash boot**（符合專案「中毒輸入不崩」ethos）。
-- **repo 正規化（防雙葉）**：策展 entry 的 repo 字串**必須**＝ GitHub 的 `full_name`（小寫 canonical `owner/name`）；
-  `mapGithubRelease` 兩個呼叫端（策展 fetch + search fan-out）都對 `repo` 做 lowercase 正規化，
-  否則同 repo 兩種寫法（casing / fork）會讓 `gh:` key 分裂、重複長葉。
+- **repo 正規化（防雙葉）— verbatim canonical，不 lowercase**：策展 entry 的 repo 字串**必須**逐字＝
+  GitHub 的 `full_name`（canonical 大小寫 `MystenLabs/walrus`，**保留大小寫**）；search fan-out 也用 GitHub 回的 `full_name` 逐字。
+  ⚠️ **不可 lowercase**：既有記憶 key 是 `gh:MystenLabs/MemWal@...`，lowercase 會讓新 key 配不上 → 30 筆既有 finding 被當 fresh 重長一次。
+  invariant＝兩個呼叫端都用 canonical `full_name` 逐字，靠來源一致性（GitHub 永遠回 canonical）保證不分裂，毋須轉換。
 
 ### 3.2 `backend/src/fetch.ts`（改）
 
