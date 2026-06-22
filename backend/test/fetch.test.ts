@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { mapGithubRelease, parseReleases, parseRssFeed, fetchCandidates } from '../src/fetch.js';
+import { mapGithubRelease, parseReleases, parseRssFeed, fetchCandidates, parseHnSearch, searchCandidates, dedupeByKey } from '../src/fetch.js';
 
 // Minimal fake Response for injected fetch — only the bits fetchCandidates uses.
 function fakeRes(body: unknown, { ok = true, text = false } = {}) {
@@ -170,4 +170,99 @@ test('fetchCandidates never throws when everything fails', async () => {
   }) as unknown as typeof fetch;
   const out = await fetchCandidates({ fetchImpl, repos: ['a/b', 'c/d'], rssFeeds: ['https://feed'] });
   assert.deepStrictEqual(out, []);
+});
+
+// --- HN Algolia mapping ---
+// WHY: HN key must be the stable objectID so the same story dedupes across runs.
+test('parseHnSearch maps a hit with a stable hn:<objectID> key', () => {
+  const out = parseHnSearch({ hits: [{ objectID: '42', title: 'Walrus is great', url: 'https://blog/x', story_text: '' }] });
+  assert.strictEqual(out.length, 1);
+  assert.strictEqual(out[0].key, 'hn:42');
+  assert.strictEqual(out[0].title, 'Walrus is great');
+  assert.strictEqual(out[0].sourceUrl, 'https://blog/x');
+});
+
+// WHY: a hostile HN url (javascript:) must NOT become a clickable sourceUrl;
+// it falls back to the safe HN item permalink.
+test('parseHnSearch rejects non-http url, falls back to HN permalink', () => {
+  const out = parseHnSearch({ hits: [{ objectID: '7', title: 't', url: 'javascript:alert(1)' }] });
+  assert.strictEqual(out[0].sourceUrl, 'https://news.ycombinator.com/item?id=7');
+});
+
+// WHY: malformed payloads (no hits array, missing objectID) must drop quietly,
+// never crash recall/diff downstream.
+test('parseHnSearch drops malformed hits and non-arrays', () => {
+  assert.deepStrictEqual(parseHnSearch({}), []);
+  assert.deepStrictEqual(parseHnSearch({ hits: [{ title: 'no id' }] }), []);
+});
+
+// WHY: a search-triggered run fans out search→repos→releases AND queries HN;
+// both feed the same candidate pool, so the agent discovers topic-relevant
+// content beyond the 3 curated repos.
+test('searchCandidates fans GitHub search → releases and adds HN hits', async () => {
+  const calls: string[] = [];
+  const fetchImpl = (async (url: string) => {
+    calls.push(url);
+    if (url.includes('/search/repositories')) return fakeRes({ items: [{ full_name: 'acme/foo' }] });
+    if (url.includes('/repos/acme/foo/releases')) return fakeRes([{ tag_name: 'v1', name: 'Foo v1', body: 'b', html_url: 'https://gh/foo' }]);
+    if (url.includes('hn.algolia.com')) return fakeRes({ hits: [{ objectID: '9', title: 'Foo on HN', url: 'https://hn/foo' }] });
+    return fakeRes([], { ok: false });
+  }) as unknown as typeof fetch;
+
+  const out = await searchCandidates('foo', { fetchImpl });
+  const keys = out.map((f) => f.key).sort();
+  assert.deepStrictEqual(keys, ['gh:acme/foo@v1', 'hn:9']);
+  // topic is URL-encoded into the query
+  assert.ok(calls.some((u) => u.includes('q=foo')));
+});
+
+// WHY: the topic goes into a query string — special chars must be encoded so a
+// topic like 'a&b' can't break the URL or smuggle params.
+test('searchCandidates url-encodes the topic', async () => {
+  const calls: string[] = [];
+  const fetchImpl = (async (url: string) => { calls.push(url); return fakeRes({ items: [] }); }) as unknown as typeof fetch;
+  await searchCandidates('a&b c', { fetchImpl });
+  assert.ok(calls.some((u) => u.includes('a%26b%20c')));
+  assert.ok(!calls.some((u) => u.includes('a&b c')));
+});
+
+// WHY: one failing source must not kill the run — a bad GitHub search still
+// lets HN results through, and vice versa.
+test('searchCandidates skips a failing source, keeps the other', async () => {
+  const fetchImpl = (async (url: string) => {
+    if (url.includes('/search/repositories')) throw new Error('boom');
+    if (url.includes('hn.algolia.com')) return fakeRes({ hits: [{ objectID: '1', title: 'x', url: 'https://x' }] });
+    return fakeRes([], { ok: false });
+  }) as unknown as typeof fetch;
+  const out = await searchCandidates('t', { fetchImpl });
+  assert.deepStrictEqual(out.map((f) => f.key), ['hn:1']);
+});
+
+// WHY: merging curated + search pools can repeat a release; dedupeByKey keeps
+// the first occurrence so a node never double-leafs.
+test('dedupeByKey keeps first per key', () => {
+  const a = { key: 'gh:r@1', title: 'A', summary: '', sourceUrl: '' };
+  const b = { key: 'gh:r@1', title: 'B', summary: '', sourceUrl: '' };
+  const out = dedupeByKey([a, b]);
+  assert.strictEqual(out.length, 1);
+  assert.strictEqual(out[0].title, 'A');
+});
+
+// WHY: a topic with URL metacharacters must encode into BOTH the GitHub and HN
+// queries — never leak raw `#`/`?`/`&` into the URL.
+test('searchCandidates encodes metachar topics for every source', async () => {
+  const calls: string[] = [];
+  const fetchImpl = (async (url: string) => { calls.push(url); return fakeRes({ items: [], hits: [] }); }) as unknown as typeof fetch;
+  await searchCandidates('a#b?c&d', { fetchImpl });
+  // raw topic metacharacters (# ? &) must never reach any request URL
+  assert.ok(calls.every((u) => !u.includes('a#b') && !u.includes('b?c') && !u.includes('c&d')));
+  // they appear url-encoded instead (%23 # , %3F ? , %26 &)
+  assert.ok(calls.some((u) => u.includes('a%23b%3Fc%26d')));
+  assert.ok(calls.some((u) => u.includes('hn.algolia.com')));
+});
+
+// WHY: HN returning zero hits is normal for cold topics — must yield [] cleanly.
+test('searchCandidates with empty results returns []', async () => {
+  const fetchImpl = (async () => fakeRes({ items: [], hits: [] })) as unknown as typeof fetch;
+  assert.deepStrictEqual(await searchCandidates('nothing', { fetchImpl }), []);
 });

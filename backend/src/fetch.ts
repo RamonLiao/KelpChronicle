@@ -26,7 +26,7 @@ export function mapGithubRelease(r: GhRelease): Finding {
 // Only http(s) URLs are safe to surface as a clickable sourceUrl. Anything
 // else (javascript:, data:, opaque guid) collapses to '' — defense against
 // XSS from a hostile RSS feed.
-function safeHttpUrl(s: string): string {
+export function safeHttpUrl(s: string): string {
   return /^https?:\/\//i.test(s) ? s : '';
 }
 
@@ -116,6 +116,30 @@ export function parseReleases(repo: string, data: unknown): Finding[] {
   return out;
 }
 
+// Pure HN Algolia mapping — same determinism contract as mapGithubRelease.
+// key = `hn:<objectID>` (objectID stable per story). title/story_text are
+// mutable display fields, never part of the key. sourceUrl must be a SAFE
+// http(s) url or it falls back to the HN item permalink.
+export function parseHnSearch(data: unknown): Finding[] {
+  const hits = (data as { hits?: unknown })?.hits;
+  if (!Array.isArray(hits)) return [];
+  const out: Finding[] = [];
+  for (const h of hits) {
+    const id = (h as { objectID?: unknown })?.objectID;
+    if (typeof id !== 'string' || !id) continue; // no stable key → drop
+    const title = typeof (h as { title?: unknown }).title === 'string' ? (h as { title: string }).title : '';
+    const storyText = typeof (h as { story_text?: unknown }).story_text === 'string' ? (h as { story_text: string }).story_text : '';
+    const url = typeof (h as { url?: unknown }).url === 'string' ? (h as { url: string }).url : '';
+    out.push({
+      key: `hn:${id}`,
+      title: title || `HN story ${id}`,
+      summary: (storyText || title).slice(0, 1000),
+      sourceUrl: safeHttpUrl(url) || `https://news.ycombinator.com/item?id=${id}`,
+    });
+  }
+  return out;
+}
+
 // Deps are injectable so the GitHub→RSS fallback gating can be tested
 // deterministically without real network IO. Defaults are the production values.
 export interface FetchDeps {
@@ -126,6 +150,10 @@ export interface FetchDeps {
 
 export async function fetchCandidates(deps: FetchDeps = {}): Promise<Finding[]> {
   const fetchImpl = deps.fetchImpl ?? fetch;
+  // MUST stay `??`, never `||`: run.ts passes resolveSources()'s arrays, and an
+  // unmapped topic sends `repos: []` ON PURPOSE — it routes to search, not the
+  // default REPOS. `[] ?? REPOS` keeps the empty array; `[] || REPOS` would
+  // silently resurrect the curated default and break topic-aware discovery.
   const repos = deps.repos ?? REPOS;
   const rssFeeds = deps.rssFeeds ?? RSS_FEEDS;
   const out: Finding[] = [];
@@ -157,5 +185,80 @@ export async function fetchCandidates(deps: FetchDeps = {}): Promise<Finding[]> 
       }
     }
   }
+  return out;
+}
+
+// Shared GitHub auth header — token (when set) lifts the unauthenticated 10
+// req/min search limit to 5000/hr. A search-triggered run spends 1 search +
+// up to 5 release calls; without a token a cold topic can exhaust the budget.
+function ghHeaders(): Record<string, string> {
+  return {
+    Accept: 'application/vnd.github+json',
+    ...(process.env.GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}),
+  };
+}
+
+const MAX_SEARCH_REPOS = 5; // bounds GitHub fan-out (matches search per_page)
+
+export function dedupeByKey(findings: Finding[]): Finding[] {
+  const seen = new Set<string>();
+  const out: Finding[] = [];
+  for (const f of findings) {
+    if (seen.has(f.key)) continue;
+    seen.add(f.key);
+    out.push(f);
+  }
+  return out;
+}
+
+// Topic-driven search fallback (A1 GitHub Search + A3 HN Algolia). Each source
+// and each fan-out release fetch is individually try/catch-skipped and timeout-
+// bounded, so one bad repo / rate-limit never stalls or kills the run. Hosts are
+// hard-coded; topic is URL-encoded (never reaches the host, only the query).
+export async function searchCandidates(topic: string, deps: FetchDeps = {}): Promise<Finding[]> {
+  const fetchImpl = deps.fetchImpl ?? fetch;
+  const q = encodeURIComponent(topic);
+  const out: Finding[] = [];
+
+  // A1: GitHub Search → top repos (verbatim canonical full_name) → their releases.
+  try {
+    const res = await fetchImpl(
+      `https://api.github.com/search/repositories?q=${q}&sort=stars&per_page=${MAX_SEARCH_REPOS}`,
+      { headers: ghHeaders(), signal: AbortSignal.timeout(PER_REPO_TIMEOUT_MS) },
+    );
+    if (res.ok) {
+      const data = (await res.json()) as { items?: unknown };
+      const items = Array.isArray(data.items) ? data.items : [];
+      const repos = items
+        .map((it) => (it as { full_name?: unknown }).full_name)
+        .filter((n): n is string => typeof n === 'string' && n.length > 0)
+        .slice(0, MAX_SEARCH_REPOS);
+      for (const repo of repos) {
+        try {
+          const r2 = await fetchImpl(`https://api.github.com/repos/${repo}/releases?per_page=5`, {
+            headers: ghHeaders(),
+            signal: AbortSignal.timeout(PER_REPO_TIMEOUT_MS),
+          });
+          if (r2.ok) out.push(...parseReleases(repo, await r2.json()));
+        } catch {
+          /* one bad repo never kills the fan-out */
+        }
+      }
+    }
+  } catch {
+    /* GitHub search down/rate-limited — HN still covers the topic */
+  }
+
+  // A3: HN Algolia stories.
+  try {
+    const res = await fetchImpl(
+      `https://hn.algolia.com/api/v1/search?query=${q}&tags=story&hitsPerPage=10`,
+      { signal: AbortSignal.timeout(PER_REPO_TIMEOUT_MS) },
+    );
+    if (res.ok) out.push(...parseHnSearch(await res.json()));
+  } catch {
+    /* HN down — GitHub results (if any) still return */
+  }
+
   return out;
 }

@@ -136,3 +136,17 @@ auth gap — the demo is single-agent, this is explicitly **non-blocking**, and
 either fix is disproportionate (Rule 2) to a need the demo doesn't exercise. The
 current fail-loud throw is the correct behavior until a real multi-tenant
 deployment picks path A or B.
+
+## Topic-Aware Discovery: SSRF via env-configured feed URLs — deferred — 2026-06-22
+
+`CURATED_SOURCES[].rssFeeds` and the global `RSS_FEEDS` env var are fetched
+directly by the backend with no host allowlist. codex (dual-review) flagged
+this as an SSRF vector (e.g. `http://169.254.169.254/...`, loopback, private
+ranges). **Deferred, not fixed:** both are operator-controlled env vars — the
+same trust boundary that already exists for `RSS_FEEDS` before this feature.
+An attacker who can set these env vars already controls the backend process.
+Adding a loopback/private-range allowlist is the right hardening for a
+multi-tenant / untrusted-config deployment, but is out of scope for the
+single-operator demo and would equally need to cover the pre-existing
+`RSS_FEEDS` path. Revisit if feed config ever becomes user/tenant-supplied
+rather than operator env.
