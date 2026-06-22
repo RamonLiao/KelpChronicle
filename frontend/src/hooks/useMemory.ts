@@ -1,14 +1,6 @@
 import { useMemo } from 'react';
-import { useQuery, useQueries } from '@tanstack/react-query';
+import { useQueries } from '@tanstack/react-query';
 import { api, type Artifact } from '../lib/api.ts';
-
-export function useMemory(topic: string) {
-  return useQuery<Artifact[]>({
-    queryKey: ['memory', topic],
-    queryFn: () => api.getMemory(topic),
-    enabled: topic.trim().length > 0,
-  });
-}
 
 // Pure: merge per-topic query results into one stably-ordered array. Errored topics
 // (data === undefined) are skipped so one failing /memory never blanks the forest.

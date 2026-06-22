@@ -5,8 +5,10 @@ import { api, ApiError, type RunResult } from '../../lib/api.ts';
 
 const TOPIC_MAX = 200; // mirrors backend
 
-export function RunConsole({ topic, setTopic, onResult }: {
-  topic: string; setTopic: (t: string) => void; onResult: (r: RunResult) => void;
+export function RunConsole({ topic, setTopic, topics, onPickTopic, onRemoveTopic, onResult }: {
+  topic: string; setTopic: (t: string) => void;
+  topics: string[]; onPickTopic: (t: string) => void; onRemoveTopic: (t: string) => void;
+  onResult: (r: RunResult) => void;
 }) {
   const account = useCurrentAccount();
   const [busy, setBusy] = useState(false);
@@ -32,6 +34,22 @@ export function RunConsole({ topic, setTopic, onResult }: {
     <Panel id="run" title="New Run" defaultRect={{ x: 24, y: 64, w: 280, h: 200 }}>
       <input value={topic} maxLength={TOPIC_MAX + 1} onChange={(e) => setTopic(e.target.value)}
         placeholder="Research topic…" style={inputStyle} />
+      {topics.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {topics.map((t) => (
+            <span key={t} className="mono"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '2px 6px',
+                borderRadius: 999, cursor: 'pointer',
+                border: `1px solid ${t === topic ? 'var(--kelp-lit)' : 'var(--border)'}`,
+                color: t === topic ? 'var(--kelp-lit)' : 'var(--herb)' }}>
+              <button onClick={() => onPickTopic(t)} aria-label={`Focus topic ${t}`}
+                style={{ all: 'unset', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t}</button>
+              <button onClick={() => onRemoveTopic(t)} aria-label={`Remove topic ${t}`}
+                style={{ all: 'unset', cursor: 'pointer', opacity: 0.6 }}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
       <div className="label" style={{ marginTop: 8 }}>Agent (wallet)</div>
       <div className="mono" style={{ fontSize: 11, color: 'var(--herb)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {account ? account.address : 'connect a wallet to run'}

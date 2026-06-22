@@ -6,28 +6,34 @@ import { KelpCanvas } from './components/KelpCanvas.tsx';
 import { RunConsole } from './components/hud/RunConsole.tsx';
 import { Inspector } from './components/hud/Inspector.tsx';
 import { MemoryRestore } from './components/hud/MemoryRestore.tsx';
-import { useMemory } from './hooks/useMemory.ts';
+import { useMemoriesForTopics } from './hooks/useMemory.ts';
+import { parseTopics, writeTopics } from './lib/topics.ts';
 import { projectGraph, type KelpNode } from './lib/projectGraph.ts';
 import { api, type RunResult } from './lib/api.ts';
 
 const DEFAULT_TOPIC = 'Walrus ecosystem';
 
-// topic lives in the URL (?topic=) so the QR / shared link opens the SAME memory on another
-// device — the cross-device persistence promise breaks if topic stays only in React state.
-function initialTopic() {
-  if (typeof window === 'undefined') return DEFAULT_TOPIC;
-  return new URLSearchParams(window.location.search).get('topic') || DEFAULT_TOPIC;
+function initialTopics() {
+  if (typeof window === 'undefined') return [DEFAULT_TOPIC];
+  return parseTopics(window.location.search, DEFAULT_TOPIC);
 }
 
 export default function App() {
-  const [topic, setTopic] = useState(initialTopic);
+  const [topics, setTopics] = useState(initialTopics);
+  const [activeTopic, setActiveTopic] = useState(() => topics[0]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const u = new URL(window.location.href);
-    u.searchParams.set('topic', topic);
+    writeTopics(u, topics);
     window.history.replaceState(null, '', u);
-  }, [topic]);
+  }, [topics]);
+
+  const addTopic = (t: string) => setTopics((prev) => (prev.includes(t) ? prev : [...prev, t]));
+  const removeTopic = (t: string) => setTopics((prev) => {
+    const next = prev.filter((x) => x !== t);
+    return next.length ? next : prev; // never empty the forest to nothing
+  });
   const [live, setLive] = useState<RunResult | null>(null);
   const [selected, setSelected] = useState<KelpNode | null>(null);
   const [clearedLocally, setClearedLocally] = useState(false);
@@ -42,8 +48,8 @@ export default function App() {
   }, [showBadges]);
 
   const account = useCurrentAccount();
-  const memory = useMemory(topic);
-  const artifacts = memory.data ?? [];
+  const memory = useMemoriesForTopics(topics);
+  const artifacts = memory.artifacts;
 
   // namespace is shared across all of an agent's artifacts; take it from any recalled one.
   const namespace = artifacts[0]?.namespace ?? '';
@@ -108,9 +114,13 @@ export default function App() {
         </div>
       )}
 
-      <RunConsole topic={topic} setTopic={setTopic} onResult={(r) => { setClearedLocally(false); setLive(r); memory.refetch(); }} />
+      <RunConsole
+        topic={activeTopic} setTopic={setActiveTopic}
+        topics={topics} onPickTopic={setActiveTopic} onRemoveTopic={removeTopic}
+        onResult={(r) => { addTopic(r.artifact.topic); setActiveTopic(r.artifact.topic); setClearedLocally(false); setLive(r); memory.refetch(); }}
+      />
       <Inspector node={selected} />
-      <MemoryRestore artifacts={artifacts} topic={topic} onClearLocal={() => { setClearedLocally(true); setSelected(null); }}
+      <MemoryRestore artifacts={artifacts} topic={activeTopic} onClearLocal={() => { setClearedLocally(true); setSelected(null); }}
         onRestored={() => { setClearedLocally(false); memory.refetch(); }} />
     </div>
   );
