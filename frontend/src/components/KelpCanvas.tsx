@@ -66,22 +66,31 @@ export function KelpCanvas({ graph, onNodeClick, pulseToRunId, showBadges = true
       .filter((l) => l.source && l.target);
 
     const seabedY = () => innerHeight - 80;
-    // anchor run trunks along the seabed, spread horizontally so multiple runs form a forest row
-    // instead of stacking dead-center (the old single-column "pinned to the middle" look).
+    // each distinct topic becomes its own plant rooted at an evenly-spaced seabed band.
+    const topics = [...new Set(nodes.map((n) => n.topic))].sort();
+    const bandX = (topic: string) => {
+      const i = Math.max(0, topics.indexOf(topic));
+      return (innerWidth * (i + 1)) / (topics.length + 1);
+    };
+    // anchor each topic's run trunk(s) at its band; multiple runs of a topic stack with a small gap.
     const anchorRuns = () => {
-      const runs = nodes.filter((n) => n.kind === 'run').sort((a, b) => a.runId - b.runId);
-      const gap = 170;
-      runs.forEach((n, i) => {
-        n.fx = innerWidth / 2 + (i - (runs.length - 1) / 2) * gap;
-        n.fy = seabedY() - n.runId * 6;
-      });
+      const byTopic = new Map<string, SimNode[]>();
+      for (const n of nodes) if (n.kind === 'run') (byTopic.get(n.topic) ?? byTopic.set(n.topic, []).get(n.topic)!).push(n);
+      for (const [topic, runs] of byTopic) {
+        runs.sort((a, b) => a.runId - b.runId);
+        const bx = bandX(topic);
+        runs.forEach((n, i) => {
+          n.fx = bx + (i - (runs.length - 1) / 2) * 40;
+          n.fy = seabedY() - n.runId * 6;
+        });
+      }
     };
     anchorRuns();
 
     const sim = forceSimulation<SimNode, SimLink>(nodes)
       .force('link', forceLink<SimNode, SimLink>(links).id((d) => d.id).distance(70).strength(0.6))
       .force('charge', forceManyBody().strength(-120))
-      .force('x', forceX(innerWidth / 2).strength(0.015))
+      .force('x', forceX<SimNode>((d) => bandX(d.topic)).strength(0.04))
       .force('y', forceY((d: any) => (d.kind === 'finding' ? innerHeight * 0.35 : seabedY())).strength(0.05));
     sim.alphaTarget(0.02).restart(); // keep a faint jitter so the forest never fully freezes
     simRef.current = sim;
@@ -89,7 +98,7 @@ export function KelpCanvas({ graph, onNodeClick, pulseToRunId, showBadges = true
     // resize: re-fit canvas bitmap AND re-anchor the forest to the new viewport
     const resize = () => {
       canvas.width = innerWidth * dpr; canvas.height = innerHeight * dpr;
-      sim.force('x', forceX(innerWidth / 2).strength(0.015));
+      sim.force('x', forceX<SimNode>((d) => bandX(d.topic)).strength(0.04));
       sim.force('y', forceY((d: any) => (d.kind === 'finding' ? innerHeight * 0.35 : seabedY())).strength(0.05));
       anchorRuns();
       sim.alpha(0.3).restart();
