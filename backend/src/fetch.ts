@@ -183,3 +183,78 @@ export async function fetchCandidates(deps: FetchDeps = {}): Promise<Finding[]> 
   }
   return out;
 }
+
+// Shared GitHub auth header — token (when set) lifts the unauthenticated 10
+// req/min search limit to 5000/hr. A search-triggered run spends 1 search +
+// up to 5 release calls; without a token a cold topic can exhaust the budget.
+function ghHeaders(): Record<string, string> {
+  return {
+    Accept: 'application/vnd.github+json',
+    ...(process.env.GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}),
+  };
+}
+
+const MAX_SEARCH_REPOS = 5; // bounds GitHub fan-out (matches search per_page)
+
+export function dedupeByKey(findings: Finding[]): Finding[] {
+  const seen = new Set<string>();
+  const out: Finding[] = [];
+  for (const f of findings) {
+    if (seen.has(f.key)) continue;
+    seen.add(f.key);
+    out.push(f);
+  }
+  return out;
+}
+
+// Topic-driven search fallback (A1 GitHub Search + A3 HN Algolia). Each source
+// and each fan-out release fetch is individually try/catch-skipped and timeout-
+// bounded, so one bad repo / rate-limit never stalls or kills the run. Hosts are
+// hard-coded; topic is URL-encoded (never reaches the host, only the query).
+export async function searchCandidates(topic: string, deps: FetchDeps = {}): Promise<Finding[]> {
+  const fetchImpl = deps.fetchImpl ?? fetch;
+  const q = encodeURIComponent(topic);
+  const out: Finding[] = [];
+
+  // A1: GitHub Search → top repos (verbatim canonical full_name) → their releases.
+  try {
+    const res = await fetchImpl(
+      `https://api.github.com/search/repositories?q=${q}&sort=stars&per_page=${MAX_SEARCH_REPOS}`,
+      { headers: ghHeaders(), signal: AbortSignal.timeout(PER_REPO_TIMEOUT_MS) },
+    );
+    if (res.ok) {
+      const data = (await res.json()) as { items?: unknown };
+      const items = Array.isArray(data.items) ? data.items : [];
+      const repos = items
+        .map((it) => (it as { full_name?: unknown }).full_name)
+        .filter((n): n is string => typeof n === 'string' && n.length > 0)
+        .slice(0, MAX_SEARCH_REPOS);
+      for (const repo of repos) {
+        try {
+          const r2 = await fetchImpl(`https://api.github.com/repos/${repo}/releases?per_page=5`, {
+            headers: ghHeaders(),
+            signal: AbortSignal.timeout(PER_REPO_TIMEOUT_MS),
+          });
+          if (r2.ok) out.push(...parseReleases(repo, await r2.json()));
+        } catch {
+          /* one bad repo never kills the fan-out */
+        }
+      }
+    }
+  } catch {
+    /* GitHub search down/rate-limited — HN still covers the topic */
+  }
+
+  // A3: HN Algolia stories.
+  try {
+    const res = await fetchImpl(
+      `https://hn.algolia.com/api/v1/search?query=${q}&tags=story&hitsPerPage=10`,
+      { signal: AbortSignal.timeout(PER_REPO_TIMEOUT_MS) },
+    );
+    if (res.ok) out.push(...parseHnSearch(await res.json()));
+  } catch {
+    /* HN down — GitHub results (if any) still return */
+  }
+
+  return out;
+}
