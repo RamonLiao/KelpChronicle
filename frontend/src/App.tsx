@@ -30,10 +30,12 @@ export default function App() {
   }, [topics]);
 
   const addTopic = (t: string) => setTopics((prev) => (prev.includes(t) ? prev : [...prev, t]));
-  const removeTopic = (t: string) => setTopics((prev) => {
-    const next = prev.filter((x) => x !== t);
-    return next.length ? next : prev; // never empty the forest to nothing
-  });
+  const removeTopic = (t: string) => {
+    const next = topics.filter((x) => x !== t);
+    if (!next.length) return; // never empty the forest
+    setTopics(next);
+    if (t === activeTopic) setActiveTopic(next[0]);
+  };
   const [live, setLive] = useState<RunResult | null>(null);
   const [selected, setSelected] = useState<KelpNode | null>(null);
   const [clearedLocally, setClearedLocally] = useState(false);
