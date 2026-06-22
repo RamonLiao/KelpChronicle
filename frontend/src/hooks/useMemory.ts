@@ -4,9 +4,19 @@ import { api, type Artifact } from '../lib/api.ts';
 
 // Pure: merge per-topic query results into one stably-ordered array. Errored topics
 // (data === undefined) are skipped so one failing /memory never blanks the forest.
+// Dedupes by (runId, createdAtMs, topic) to eliminate semantic recall overlap across topic queries.
 export function mergeTopicArtifacts(results: ReadonlyArray<{ data?: Artifact[] }>): Artifact[] {
   const all: Artifact[] = [];
-  for (const r of results) if (r.data) all.push(...r.data);
+  const seen = new Set<string>();
+  for (const r of results) {
+    if (!r.data) continue;
+    for (const a of r.data) {
+      const id = `${a.runId}-${a.createdAtMs}-${a.topic}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      all.push(a);
+    }
+  }
   return all.sort((a, b) => (a.topic < b.topic ? -1 : a.topic > b.topic ? 1 : a.runId - b.runId));
 }
 

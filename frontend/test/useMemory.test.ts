@@ -17,3 +17,17 @@ test('stable ordering by (topic, runId) regardless of input order', () => {
   const merged = mergeTopicArtifacts([{ data: [art('B', 2), art('A', 3)] }, { data: [art('A', 1)] }]);
   assert.deepEqual(merged.map((a) => `${a.topic}${a.runId}`), ['A1', 'A3', 'B2']);
 });
+
+test('dedupes the same artifact returned by multiple topic queries', () => {
+  const a = art('A', 1);
+  const merged = mergeTopicArtifacts([{ data: [a] }, { data: [a] }]);
+  assert.equal(merged.length, 1);
+});
+
+test('keeps two artifacts that share a runId but differ in createdAtMs (backfill + live)', () => {
+  const merged = mergeTopicArtifacts([
+    { data: [{ ...art('A', 1), createdAtMs: 100 }] },
+    { data: [{ ...art('A', 1), createdAtMs: 200 }] },
+  ]);
+  assert.equal(merged.length, 2);
+});
