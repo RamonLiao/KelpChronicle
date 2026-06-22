@@ -99,3 +99,34 @@ test('lineage IS drawn within the same topic', () => {
   const g = projectGraph([mk(1, ['a'], [], 'Walrus'), mk(2, ['b'], ['1'], 'Walrus')]);
   assert.equal(g.edges.filter((e) => e.kind === 'lineage' && e.source === 'run:2' && e.target === 'run:1').length, 1);
 });
+
+test('barren re-runs collapse: only productive runs + latest survive', () => {
+  // run1 introduces a,b; run2 & run3 add nothing new (same topic, same keys)
+  const g = projectGraph([mk(1, ['a', 'b'], [], 'Walrus'), mk(2, ['a'], ['1'], 'Walrus'), mk(3, ['a', 'b'], ['1', '2'], 'Walrus')]);
+  const runIds = g.nodes.filter((n) => n.kind === 'run').map((n) => n.runId).sort();
+  assert.deepEqual(runIds, [1, 3]); // run2 dropped (barren); run3 kept as latest head
+  // findings still present and attached to a surviving run
+  assert.ok(g.nodes.find((n) => n.id === 'finding:a'));
+  assert.ok(g.nodes.find((n) => n.id === 'finding:b'));
+});
+
+test('no finding is orphaned after collapse (every finding has a membership edge to a kept run)', () => {
+  const g = projectGraph([mk(1, ['a', 'b'], [], 'W'), mk(2, [], ['1'], 'W'), mk(3, [], ['1', '2'], 'W')]);
+  const runNodeIds = new Set(g.nodes.filter((n) => n.kind === 'run').map((n) => n.id));
+  for (const fn of g.nodes.filter((n) => n.kind === 'finding')) {
+    const hasKeptOwner = g.edges.some((e) => e.kind === 'membership' && e.target === fn.id && runNodeIds.has(e.source));
+    assert.ok(hasKeptOwner, `finding ${fn.id} orphaned`);
+  }
+});
+
+test('single productive topic is unchanged (no regression)', () => {
+  const g = projectGraph([mk(1, ['a', 'b'], [], 'W')]);
+  assert.equal(g.nodes.filter((n) => n.kind === 'run').length, 1);
+  assert.equal(g.edges.filter((e) => e.kind === 'membership').length, 2);
+});
+
+test('no edge points at a dropped run node', () => {
+  const g = projectGraph([mk(1, ['a'], [], 'W'), mk(2, [], ['1'], 'W'), mk(3, [], ['2'], 'W')]);
+  const ids = new Set(g.nodes.map((n) => n.id));
+  for (const e of g.edges) { assert.ok(ids.has(e.source) && ids.has(e.target), `edge to missing node ${e.source}->${e.target}`); }
+});

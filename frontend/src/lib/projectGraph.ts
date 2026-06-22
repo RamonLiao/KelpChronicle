@@ -24,6 +24,7 @@ export function projectGraph(
   const runIds = new Set(artifacts.map((a) => a.runId));
   const runTopic = new Map<number, string>();
   for (const a of artifacts) runTopic.set(a.runId, a.topic);
+  const runFindingKeys = new Map<number, Set<string>>();
   const nodes = new Map<string, KelpNode>();
   const edges: KelpEdge[] = [];
   // two artifacts sharing a runId (backfill + live) repeat the same run->finding pairs;
@@ -51,6 +52,7 @@ export function projectGraph(
     nodes.set(runNode.id, runNode);
 
     for (const f of a.findings) {
+      (runFindingKeys.get(a.runId) ?? runFindingKeys.set(a.runId, new Set()).get(a.runId)!).add(f.key);
       const id = `finding:${f.key}`;
       const isFresh = a.runId === liveRunId && !knownKeys.has(f.key);
       const existing = nodes.get(id);
@@ -73,5 +75,28 @@ export function projectGraph(
     }
   }
 
-  return { nodes: [...nodes.values()], edges };
+  // Per topic (runs in runId order), keep a run only if it introduces a finding key not seen
+  // in an earlier run of the same topic — plus always keep each topic's latest run as the head.
+  const runNodes = [...nodes.values()].filter((n) => n.kind === 'run');
+  const runsByTopic = new Map<string, KelpNode[]>();
+  for (const r of runNodes) (runsByTopic.get(r.topic) ?? runsByTopic.set(r.topic, []).get(r.topic)!).push(r);
+
+  const keepRun = new Set<number>();
+  for (const [, runs] of runsByTopic) {
+    runs.sort((x, y) => x.runId - y.runId);
+    const latest = runs[runs.length - 1].runId;
+    const seen = new Set<string>();
+    for (const r of runs) {
+      const keys = runFindingKeys.get(r.runId) ?? new Set<string>();
+      let introducesNew = false;
+      for (const k of keys) if (!seen.has(k)) introducesNew = true;
+      for (const k of keys) seen.add(k);
+      if (introducesNew || r.runId === latest) keepRun.add(r.runId);
+    }
+  }
+
+  const keptNodes = [...nodes.values()].filter((n) => n.kind === 'finding' || keepRun.has(n.runId));
+  const keptIds = new Set(keptNodes.map((n) => n.id));
+  const keptEdges = edges.filter((e) => keptIds.has(e.source) && keptIds.has(e.target));
+  return { nodes: keptNodes, edges: keptEdges };
 }
