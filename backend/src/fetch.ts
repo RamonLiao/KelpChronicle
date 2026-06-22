@@ -26,7 +26,7 @@ export function mapGithubRelease(r: GhRelease): Finding {
 // Only http(s) URLs are safe to surface as a clickable sourceUrl. Anything
 // else (javascript:, data:, opaque guid) collapses to '' — defense against
 // XSS from a hostile RSS feed.
-function safeHttpUrl(s: string): string {
+export function safeHttpUrl(s: string): string {
   return /^https?:\/\//i.test(s) ? s : '';
 }
 
@@ -112,6 +112,30 @@ export function parseReleases(repo: string, data: unknown): Finding[] {
     if (!r || typeof (r as GhRelease).tag_name !== 'string') continue;
     const rel = r as Omit<GhRelease, 'repo'>;
     out.push(mapGithubRelease({ ...rel, repo }));
+  }
+  return out;
+}
+
+// Pure HN Algolia mapping — same determinism contract as mapGithubRelease.
+// key = `hn:<objectID>` (objectID stable per story). title/story_text are
+// mutable display fields, never part of the key. sourceUrl must be a SAFE
+// http(s) url or it falls back to the HN item permalink.
+export function parseHnSearch(data: unknown): Finding[] {
+  const hits = (data as { hits?: unknown })?.hits;
+  if (!Array.isArray(hits)) return [];
+  const out: Finding[] = [];
+  for (const h of hits) {
+    const id = (h as { objectID?: unknown })?.objectID;
+    if (typeof id !== 'string' || !id) continue; // no stable key → drop
+    const title = typeof (h as { title?: unknown }).title === 'string' ? (h as { title: string }).title : '';
+    const storyText = typeof (h as { story_text?: unknown }).story_text === 'string' ? (h as { story_text: string }).story_text : '';
+    const url = typeof (h as { url?: unknown }).url === 'string' ? (h as { url: string }).url : '';
+    out.push({
+      key: `hn:${id}`,
+      title: title || `HN story ${id}`,
+      summary: (storyText || title).slice(0, 1000),
+      sourceUrl: safeHttpUrl(url) || `https://news.ycombinator.com/item?id=${id}`,
+    });
   }
   return out;
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { mapGithubRelease, parseReleases, parseRssFeed, fetchCandidates } from '../src/fetch.js';
+import { mapGithubRelease, parseReleases, parseRssFeed, fetchCandidates, parseHnSearch } from '../src/fetch.js';
 
 // Minimal fake Response for injected fetch — only the bits fetchCandidates uses.
 function fakeRes(body: unknown, { ok = true, text = false } = {}) {
@@ -170,4 +170,28 @@ test('fetchCandidates never throws when everything fails', async () => {
   }) as unknown as typeof fetch;
   const out = await fetchCandidates({ fetchImpl, repos: ['a/b', 'c/d'], rssFeeds: ['https://feed'] });
   assert.deepStrictEqual(out, []);
+});
+
+// --- HN Algolia mapping ---
+// WHY: HN key must be the stable objectID so the same story dedupes across runs.
+test('parseHnSearch maps a hit with a stable hn:<objectID> key', () => {
+  const out = parseHnSearch({ hits: [{ objectID: '42', title: 'Walrus is great', url: 'https://blog/x', story_text: '' }] });
+  assert.strictEqual(out.length, 1);
+  assert.strictEqual(out[0].key, 'hn:42');
+  assert.strictEqual(out[0].title, 'Walrus is great');
+  assert.strictEqual(out[0].sourceUrl, 'https://blog/x');
+});
+
+// WHY: a hostile HN url (javascript:) must NOT become a clickable sourceUrl;
+// it falls back to the safe HN item permalink.
+test('parseHnSearch rejects non-http url, falls back to HN permalink', () => {
+  const out = parseHnSearch({ hits: [{ objectID: '7', title: 't', url: 'javascript:alert(1)' }] });
+  assert.strictEqual(out[0].sourceUrl, 'https://news.ycombinator.com/item?id=7');
+});
+
+// WHY: malformed payloads (no hits array, missing objectID) must drop quietly,
+// never crash recall/diff downstream.
+test('parseHnSearch drops malformed hits and non-arrays', () => {
+  assert.deepStrictEqual(parseHnSearch({}), []);
+  assert.deepStrictEqual(parseHnSearch({ hits: [{ title: 'no id' }] }), []);
 });
