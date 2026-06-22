@@ -52,7 +52,15 @@ export async function runAgent(
   const prior = await deps.recall(topic);
   const known = new Set(prior.flatMap((a) => a.findings.map((f) => f.key)));
   const sources = resolveSources(topic);
-  let candidates = await deps.fetch({ repos: sources.repos, rssFeeds: sources.rssFeeds });
+  // Asymmetric on purpose: `repos: []` stays empty (unmapped topic routes to
+  // search, NOT the old curated REPOS default — the whole point of this feature).
+  // But `rssFeeds: undefined` when no curated feed lets fetchCandidates fall back
+  // to the global RSS_FEEDS env (its "GitHub down" fallback), which a literal []
+  // would silently disable.
+  let candidates = await deps.fetch({
+    repos: sources.repos,
+    rssFeeds: sources.rssFeeds.length ? sources.rssFeeds : undefined,
+  });
   let { fresh, knownHit } = computeDelta(known, candidates);
   if (fresh.length < SEARCH_THRESHOLD) {
     const searched = await deps.search(topic);
