@@ -122,7 +122,7 @@ export default function App() {
         onResult={(r) => { addTopic(r.artifact.topic); setActiveTopic(r.artifact.topic); setClearedLocally(false); setLive(r); memory.refetch(); }}
       />
       <Inspector node={selected} />
-      <MemoryRestore artifacts={artifacts} topic={activeTopic} onClearLocal={() => { setClearedLocally(true); setSelected(null); }}
+      <MemoryRestore artifacts={artifacts} topics={topics} onClearLocal={() => { setClearedLocally(true); setSelected(null); }}
         onRestored={() => { setClearedLocally(false); memory.refetch(); }} />
     </div>
   );

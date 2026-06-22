@@ -2,18 +2,20 @@ import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { Panel } from './Panel.tsx';
 import { api, type Artifact } from '../../lib/api.ts';
+import { writeTopics } from '../../lib/topics.ts';
 
-export function MemoryRestore({ artifacts, topic, onClearLocal, onRestored }: {
-  artifacts: Artifact[]; topic: string; onClearLocal: () => void; onRestored: () => void;
+export function MemoryRestore({ artifacts, topics, onClearLocal, onRestored }: {
+  artifacts: Artifact[]; topics: string[]; onClearLocal: () => void; onRestored: () => void;
 }) {
   const [qr, setQr] = useState<string>('');
   const [busy, setBusy] = useState(false);
-  // encode the current topic into the QR target so the scanned device opens the same memory
+  // encode the FULL watchlist into the QR target so the scanned device opens the same forest.
+  // set('topic', ...) would collapse the repeated ?topic= params down to one — dropping topics.
   useEffect(() => {
     const u = new URL(window.location.href);
-    u.searchParams.set('topic', topic);
+    writeTopics(u, topics);
     QRCode.toDataURL(u.toString(), { margin: 1, width: 96 }).then(setQr).catch(() => {});
-  }, [topic]);
+  }, [topics]);
 
   const restore = async () => {
     setBusy(true);
