@@ -4,8 +4,9 @@
 // Deps are injected so the whole loop is testable offline with fakes — the only
 // untested path is real relayer/chain IO.
 import { recallArtifacts, rememberArtifact } from './memory.js';
-import { fetchCandidates } from './fetch.js';
+import { fetchCandidates, searchCandidates, dedupeByKey } from './fetch.js';
 import { computeDelta } from './diff.js';
+import { resolveSources } from './sources.js';
 import { summarizeFresh } from './summarize.js';
 import { artifactHashHex } from '../../shared/src/canonical.js';
 import type { Artifact } from '../../shared/src/artifact.js';
@@ -15,6 +16,7 @@ import { MEMWAL_NAMESPACE } from './config.js';
 export interface RunDeps {
   recall: typeof recallArtifacts;
   fetch: typeof fetchCandidates;
+  search: typeof searchCandidates;
   remember: typeof rememberArtifact;
   execute: AttestExecutor;
 }
@@ -24,9 +26,14 @@ export interface RunDeps {
 const defaultDeps = (): RunDeps => ({
   recall: recallArtifacts,
   fetch: fetchCandidates,
+  search: searchCandidates,
   remember: rememberArtifact,
   execute: (tx) => defaultExecutor()(tx),
 });
+
+// Supplement curated sources with topic search only when the curated feed is
+// thin — keeps rate-limited search calls off the rich, common topics (M3).
+const SEARCH_THRESHOLD = 5;
 
 export interface RunResult {
   artifact: Artifact;
@@ -44,8 +51,14 @@ export async function runAgent(
 ): Promise<RunResult> {
   const prior = await deps.recall(topic);
   const known = new Set(prior.flatMap((a) => a.findings.map((f) => f.key)));
-  const candidates = await deps.fetch();
-  const { fresh, knownHit } = computeDelta(known, candidates);
+  const sources = resolveSources(topic);
+  let candidates = await deps.fetch({ repos: sources.repos, rssFeeds: sources.rssFeeds });
+  let { fresh, knownHit } = computeDelta(known, candidates);
+  if (fresh.length < SEARCH_THRESHOLD) {
+    const searched = await deps.search(topic);
+    candidates = dedupeByKey([...candidates, ...searched]);
+    ({ fresh, knownHit } = computeDelta(known, candidates));
+  }
   const summarized = summarizeFresh(fresh);
 
   // runId is a best-effort monotonic label above all *recalled* prior runs. It is NOT a
