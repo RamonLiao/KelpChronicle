@@ -254,7 +254,10 @@ test('searchCandidates encodes metachar topics for every source', async () => {
   const calls: string[] = [];
   const fetchImpl = (async (url: string) => { calls.push(url); return fakeRes({ items: [], hits: [] }); }) as unknown as typeof fetch;
   await searchCandidates('a#b?c&d', { fetchImpl });
-  assert.ok(calls.every((u) => !/[#?]b/.test(u))); // no raw metachars from the topic
+  // raw topic metacharacters (# ? &) must never reach any request URL
+  assert.ok(calls.every((u) => !u.includes('a#b') && !u.includes('b?c') && !u.includes('c&d')));
+  // they appear url-encoded instead (%23 # , %3F ? , %26 &)
+  assert.ok(calls.some((u) => u.includes('a%23b%3Fc%26d')));
   assert.ok(calls.some((u) => u.includes('hn.algolia.com')));
 });
 
