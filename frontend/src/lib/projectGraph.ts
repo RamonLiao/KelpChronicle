@@ -53,7 +53,9 @@ export function projectGraph(
 
     for (const f of a.findings) {
       (runFindingKeys.get(a.runId) ?? runFindingKeys.set(a.runId, new Set()).get(a.runId)!).add(f.key);
-      const id = `finding:${f.key}`;
+      // scope finding node identity to its topic — a key shared across two watched topics
+      // must NOT collapse to one node, or it bridges two plants into the wrong seabed band.
+      const id = `finding:${a.topic}:${f.key}`;
       const isFresh = a.runId === liveRunId && !knownKeys.has(f.key);
       const existing = nodes.get(id);
       if (existing) {

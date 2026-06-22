@@ -38,7 +38,7 @@ export function useMemoriesForTopics(topics: string[]) {
   // string key built from each query's dataUpdatedAt, NOT the fresh `results` array identity
   // (which changes every render and would rebuild the d3 sim downstream).
   const updatedKey = results.map((r) => r.dataUpdatedAt).join(',');
-  const topicsKey = topics.join(' ');
+  const topicsKey = JSON.stringify(topics); // join(' ') would collide on free-text topics
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const artifacts = useMemo(() => mergeTopicArtifacts(results, topics), [updatedKey, topicsKey]);
   return {
