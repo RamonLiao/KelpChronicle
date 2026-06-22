@@ -32,3 +32,25 @@ test('repos preserve canonical casing (never lowercased)', () => {
   const s = resolveSources('walrus');
   assert.ok(s.repos.every((r) => r === r.trim() && /[A-Z]/.test(r.split('/')[0])));
 });
+
+// WHY: a hostile/garbage CURATED_SOURCES env must fall back to the seed, never
+// crash boot — matches the project's poisoned-input-doesn't-crash ethos.
+test('malformed CURATED_SOURCES env falls back to seed', () => {
+  const prev = process.env.CURATED_SOURCES;
+  try {
+    process.env.CURATED_SOURCES = '{not json';
+    assert.ok(resolveSources('walrus').repos.includes('MystenLabs/walrus'));
+    process.env.CURATED_SOURCES = '{"a":1}'; // not an array
+    assert.ok(resolveSources('walrus').repos.includes('MystenLabs/walrus'));
+  } finally {
+    if (prev === undefined) delete process.env.CURATED_SOURCES;
+    else process.env.CURATED_SOURCES = prev;
+  }
+});
+
+// WHY: extreme topics (empty, very long, emoji/CJK, special chars) must not throw.
+test('extreme topics resolve without throwing', () => {
+  for (const t of ['', ' '.repeat(500), '海象 🦭 walrus', 'a&b#c?d', '../../etc']) {
+    assert.doesNotThrow(() => resolveSources(t));
+  }
+});

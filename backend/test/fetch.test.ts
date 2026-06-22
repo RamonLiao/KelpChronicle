@@ -247,3 +247,19 @@ test('dedupeByKey keeps first per key', () => {
   assert.strictEqual(out.length, 1);
   assert.strictEqual(out[0].title, 'A');
 });
+
+// WHY: a topic with URL metacharacters must encode into BOTH the GitHub and HN
+// queries — never leak raw `#`/`?`/`&` into the URL.
+test('searchCandidates encodes metachar topics for every source', async () => {
+  const calls: string[] = [];
+  const fetchImpl = (async (url: string) => { calls.push(url); return fakeRes({ items: [], hits: [] }); }) as unknown as typeof fetch;
+  await searchCandidates('a#b?c&d', { fetchImpl });
+  assert.ok(calls.every((u) => !/[#?]b/.test(u))); // no raw metachars from the topic
+  assert.ok(calls.some((u) => u.includes('hn.algolia.com')));
+});
+
+// WHY: HN returning zero hits is normal for cold topics — must yield [] cleanly.
+test('searchCandidates with empty results returns []', async () => {
+  const fetchImpl = (async () => fakeRes({ items: [], hits: [] })) as unknown as typeof fetch;
+  assert.deepStrictEqual(await searchCandidates('nothing', { fetchImpl }), []);
+});
