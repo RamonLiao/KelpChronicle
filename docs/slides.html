@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KelpChronicle — Pitch</title>
+<style>
+  :root{
+    --abyss:#04121a; --deep:#072330; --teal:#0d3a4a;
+    --kelp:#1f7a5c; --bud:#34e0d0; --amber:#f4b860;
+    --ink:#e8f4f2; --mut:#7fa6a8; --line:rgba(52,224,208,.18);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:var(--abyss);
+    font-family:"Iowan Old Style","Palatino Linotype",Georgia,serif;color:var(--ink)}
+  /* marine snow */
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:radial-gradient(circle,rgba(255,255,255,.5) 1px,transparent 1px),
+      radial-gradient(circle,rgba(255,255,255,.3) 1px,transparent 1px);
+    background-size:140px 140px,90px 90px;background-position:0 0,40px 60px;
+    opacity:.12;animation:drift 60s linear infinite}
+  @keyframes drift{to{background-position:0 700px,40px 760px}}
+
+  #deck{position:relative;height:100%;width:100%;z-index:1}
+  .slide{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;
+    padding:7vh 9vw;opacity:0;transform:translateX(40px) scale(.99);
+    transition:opacity .5s ease,transform .5s ease;pointer-events:none;
+    background:radial-gradient(120% 90% at 70% 10%,var(--deep),var(--abyss) 70%)}
+  .slide.active{opacity:1;transform:none;pointer-events:auto}
+  .slide.prev{transform:translateX(-40px) scale(.99)}
+
+  .kicker{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:.78rem;
+    letter-spacing:.32em;text-transform:uppercase;color:var(--bud);margin-bottom:1.4rem}
+  h1{font-size:clamp(2.6rem,7vw,5.6rem);line-height:1.02;letter-spacing:-.02em;font-weight:600}
+  h2{font-size:clamp(1.9rem,4.4vw,3.4rem);line-height:1.1;letter-spacing:-.01em;margin-bottom:2rem;font-weight:600}
+  .sub{font-size:clamp(1.05rem,2vw,1.5rem);color:var(--mut);margin-top:1.6rem;max-width:46ch;line-height:1.5}
+  .lead{font-size:clamp(1.15rem,2.2vw,1.7rem);line-height:1.55;max-width:50ch}
+  .lead b{color:var(--bud);font-weight:600}
+  .amber{color:var(--amber)}
+
+  ul{list-style:none;display:flex;flex-direction:column;gap:1.3rem;margin-top:.5rem}
+  li{font-size:clamp(1.1rem,2.1vw,1.7rem);display:flex;gap:1rem;align-items:flex-start;
+    line-height:1.4;max-width:54ch}
+  li .g{color:var(--bud);flex:none;font-family:ui-monospace,monospace}
+  li small{display:block;color:var(--mut);font-size:.72em;margin-top:.3rem;font-family:ui-monospace,monospace}
+
+  .three{display:grid;grid-template-columns:repeat(3,1fr);gap:1.6rem;margin-top:1rem}
+  .card{border:1px solid var(--line);border-radius:14px;padding:1.6rem 1.4rem;
+    background:linear-gradient(160deg,rgba(13,58,74,.5),rgba(7,35,48,.2))}
+  .card h3{font-family:ui-monospace,monospace;font-size:.74rem;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--bud);margin-bottom:.7rem}
+  .card p{color:var(--ink);font-size:1.05rem;line-height:1.45}
+  .card.amberc h3{color:var(--amber)}
+
+  .glyph{font-size:clamp(4rem,12vw,9rem);line-height:1;margin-bottom:1rem;
+    filter:drop-shadow(0 0 30px rgba(52,224,208,.4))}
+  .title h1 span{color:var(--bud)}
+
+  /* nav */
+  #ui{position:fixed;inset:auto 0 0 0;z-index:5;display:flex;align-items:center;
+    justify-content:space-between;padding:1.2rem 2rem;pointer-events:none}
+  .nav{pointer-events:auto;display:flex;gap:.6rem}
+  .nav button{font-family:ui-monospace,monospace;background:rgba(13,58,74,.6);
+    color:var(--bud);border:1px solid var(--line);border-radius:10px;width:46px;height:46px;
+    font-size:1.3rem;cursor:pointer;transition:.2s;backdrop-filter:blur(6px)}
+  .nav button:hover{background:var(--kelp);color:#fff;border-color:var(--bud)}
+  #dots{pointer-events:auto;display:flex;gap:.5rem}
+  .dot{width:9px;height:9px;border-radius:50%;background:rgba(127,166,168,.3);
+    cursor:pointer;transition:.2s}
+  .dot.on{background:var(--bud);box-shadow:0 0 10px var(--bud)}
+  #count{position:fixed;top:1.4rem;right:2rem;z-index:5;font-family:ui-monospace,monospace;
+    font-size:.78rem;color:var(--mut);letter-spacing:.1em}
+  .time{position:fixed;top:1.4rem;left:2rem;z-index:5;font-family:ui-monospace,monospace;
+    font-size:.72rem;color:var(--kelp);letter-spacing:.15em;text-transform:uppercase}
+  code{font-family:ui-monospace,monospace;color:var(--amber);font-size:.9em;
+    background:rgba(244,184,96,.08);padding:.1em .4em;border-radius:5px}
+</style>
+</head>
+<body>
+<div class="time" id="phase">slides · 1 min</div>
+<div id="count"></div>
+<div id="deck">
+
+  <!-- 1 -->
+  <section class="slide title">
+    <div class="glyph">🌿</div>
+    <h1>Kelp<span>Chronicle</span></h1>
+    <p class="sub">A persistent, verifiable memory for autonomous agents — stored on Walrus, anchored on Sui, grown as a living kelp forest.</p>
+  </section>
+
+  <!-- 2 -->
+  <section class="slide">
+    <div class="kicker">The problem</div>
+    <h2>Agents have amnesia.</h2>
+    <div class="three">
+      <div class="card"><h3>Transient</h3><p>Restart the agent and its memory vanishes.</p></div>
+      <div class="card"><h3>Locked-in</h3><p>Trapped in a centralised Web2 vector database.</p></div>
+      <div class="card"><h3>Unverifiable</h3><p>You can't prove it wasn't tampered with.</p></div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="slide">
+    <div class="kicker">The fix</div>
+    <h2>Memory that outlives the agent.</h2>
+    <p class="lead">Memory lives on <b>Walrus</b>, via MemWal. Every run's content hash is anchored <b>on-chain on Sui</b> through <code>recall::attestation</code>.<br><br>
+    It survives restarts. It moves between machines. <span class="amber">Anyone can audit it.</span></p>
+  </section>
+
+  <!-- 4 -->
+  <section class="slide title">
+    <div class="kicker">The metaphor</div>
+    <h1>We grow it as a<br><span>living kelp forest.</span></h1>
+    <p class="sub">Every strand is a research run. Every bud is a finding. The structure is driven entirely by real data — let me show you.</p>
+  </section>
+
+  <!-- 5 — demo marker -->
+  <section class="slide">
+    <div class="kicker amber">▷ Live demo · 3 min</div>
+    <h2>Watch the agent remember.</h2>
+    <ul>
+      <li><span class="g">01</span><div>The forest is real runs &amp; findings — it sways to the cursor.</div></li>
+      <li><span class="g">02</span><div>Run a topic → a strand grows → <b style="color:var(--bud)">fresh vs known</b> dedup.</div></li>
+      <li><span class="g">03</span><div>Earned badges → click <b style="color:var(--bud)">Verified on-chain ✓</b> → real testnet tx.</div></li>
+      <li><span class="g">04</span><div>Clear the view → <b class="amber">Restore from Walrus</b> → scan QR to phone.</div></li>
+    </ul>
+  </section>
+
+  <!-- 6 -->
+  <section class="slide">
+    <div class="kicker">Future vision · 1 min</div>
+    <h2>From one agent to an<br>ecosystem of memory.</h2>
+    <p class="lead">Memory is a public, verifiable Walrus artifact — so agents can <b>share</b> it. One agent reads another's anchored findings and trusts them, because the hash is on-chain.<br><br>
+    <span class="amber">A marketplace of verifiable agent memory.</span></p>
+  </section>
+
+  <!-- 7 -->
+  <section class="slide">
+    <div class="kicker">Roadmap</div>
+    <h2>What's next.</h2>
+    <div class="three">
+      <div class="card"><h3>Multi-tenant</h3><p>Namespaces so many agents coexist.</p></div>
+      <div class="card amberc"><h3>Access control</h3><p>Seal-gated private memory you sell, not expose.</p></div>
+      <div class="card"><h3>Provenance</h3><p>Prove the reasoning, not just the result.</p></div>
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section class="slide title">
+    <div class="glyph">🌿</div>
+    <h1>A memory that<br><span>proves itself.</span></h1>
+    <p class="sub">KelpChronicle — give your agent a memory that outlives it, travels with it, and anyone can verify. Thank you.</p>
+  </section>
+
+</div>
+
+<div id="ui">
+  <div id="dots"></div>
+  <div class="nav">
+    <button id="prev" aria-label="Previous">‹</button>
+    <button id="next" aria-label="Next">›</button>
+  </div>
+</div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  const dotsWrap=document.getElementById('dots');
+  const count=document.getElementById('count');
+  const phase=document.getElementById('phase');
+  const phases=['slides · 1 min','slides · 1 min','slides · 1 min','slides · 1 min',
+    '▷ demo · 3 min','vision · 1 min','vision · 1 min','vision · 1 min'];
+  let i=0;
+  slides.forEach((_,n)=>{const d=document.createElement('div');d.className='dot';
+    d.onclick=()=>go(n);dotsWrap.appendChild(d)});
+  const dots=[...dotsWrap.children];
+  function go(n){
+    i=Math.max(0,Math.min(slides.length-1,n));
+    slides.forEach((s,k)=>{s.classList.toggle('active',k===i);
+      s.classList.toggle('prev',k<i)});
+    dots.forEach((d,k)=>d.classList.toggle('on',k===i));
+    count.textContent=String(i+1).padStart(2,'0')+' / '+String(slides.length).padStart(2,'0');
+    phase.textContent=phases[i]||'';
+  }
+  document.getElementById('next').onclick=()=>go(i+1);
+  document.getElementById('prev').onclick=()=>go(i-1);
+  addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown')go(i+1);
+    if(e.key==='ArrowLeft'||e.key==='PageUp')go(i-1);
+    if(e.key==='Home')go(0);if(e.key==='End')go(slides.length-1);
+  });
+  // touch swipe
+  let x0=null;
+  addEventListener('touchstart',e=>x0=e.touches[0].clientX,{passive:true});
+  addEventListener('touchend',e=>{if(x0===null)return;
+    const dx=e.changedTouches[0].clientX-x0;
+    if(Math.abs(dx)>50)go(dx<0?i+1:i-1);x0=null},{passive:true});
+  go(0);
+</script>
+</body>
+</html>
