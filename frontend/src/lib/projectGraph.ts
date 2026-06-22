@@ -1,7 +1,7 @@
 import type { Artifact, RunResult } from './api.ts';
 
 export interface KelpNode {
-  id: string; kind: 'run' | 'finding'; runId: number; label: string; fresh: boolean;
+  id: string; kind: 'run' | 'finding'; runId: number; topic: string; label: string; fresh: boolean;
   createdAtMs?: number; blobId?: string; digest?: string;
   findingKey?: string; summary?: string; sourceUrl?: string;
 }
@@ -22,6 +22,8 @@ export function projectGraph(
   }
 
   const runIds = new Set(artifacts.map((a) => a.runId));
+  const runTopic = new Map<number, string>();
+  for (const a of artifacts) runTopic.set(a.runId, a.topic);
   const nodes = new Map<string, KelpNode>();
   const edges: KelpEdge[] = [];
   // two artifacts sharing a runId (backfill + live) repeat the same run->finding pairs;
@@ -36,7 +38,7 @@ export function projectGraph(
 
   for (const a of artifacts) {
     const runNode: KelpNode = {
-      id: `run:${a.runId}`, kind: 'run', runId: a.runId, label: `Run #${a.runId}`,
+      id: `run:${a.runId}`, kind: 'run', runId: a.runId, topic: a.topic, label: `Run #${a.runId}`,
       fresh: a.runId === liveRunId, createdAtMs: a.createdAtMs,
     };
     if (a.runId === liveRunId && live) { runNode.blobId = live.blobId; runNode.digest = live.attestationDigest; }
@@ -56,7 +58,7 @@ export function projectGraph(
         if (isFresh) existing.fresh = true; // promote if surfaced fresh this run
       } else {
         nodes.set(id, {
-          id, kind: 'finding', runId: a.runId, label: f.title, fresh: isFresh,
+          id, kind: 'finding', runId: a.runId, topic: a.topic, label: f.title, fresh: isFresh,
           findingKey: f.key, summary: f.summary, sourceUrl: f.sourceUrl,
         });
       }
@@ -65,7 +67,9 @@ export function projectGraph(
 
     for (const pid of a.priorRunIds) {
       const n = Number(pid);
-      if (runIds.has(n)) addEdge({ source: `run:${a.runId}`, target: `run:${n}`, kind: 'lineage' });
+      if (runIds.has(n) && runTopic.get(n) === a.topic) {
+        addEdge({ source: `run:${a.runId}`, target: `run:${n}`, kind: 'lineage' });
+      }
     }
   }
 

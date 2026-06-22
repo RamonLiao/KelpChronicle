@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { projectGraph } from '../src/lib/projectGraph.ts';
 import type { Artifact, RunResult } from '../src/lib/api.ts';
 
-const mk = (runId: number, keys: string[], priors: string[] = []): Artifact => ({
+const mk = (runId: number, keys: string[], priors: string[] = [], topic = 'Walrus'): Artifact => ({
   schema: 'recall.report.v1', agent: '0x6', namespace: 'ns', runId, createdAtMs: runId * 1000,
-  topic: 'Walrus', priorRunIds: priors,
+  topic, priorRunIds: priors,
   findings: keys.map((k) => ({ key: k, title: `T${k}`, summary: `S${k}`, sourceUrl: `https://x/${k}` })),
 });
 
@@ -79,4 +79,23 @@ test('without live, no node is fresh and no blobId/digest set', () => {
   const g = projectGraph([mk(1, ['a'])]);
   assert.ok(g.nodes.every((n) => n.fresh === false));
   assert.ok(g.nodes.every((n) => n.blobId === undefined && n.digest === undefined));
+});
+
+test('every node carries the topic of its run', () => {
+  const g = projectGraph([mk(1, ['a'], [], 'Walrus'), mk(2, ['b'], [], 'Seal')]);
+  assert.equal(g.nodes.find((n) => n.id === 'run:1')!.topic, 'Walrus');
+  assert.equal(g.nodes.find((n) => n.id === 'finding:a')!.topic, 'Walrus');
+  assert.equal(g.nodes.find((n) => n.id === 'run:2')!.topic, 'Seal');
+  assert.equal(g.nodes.find((n) => n.id === 'finding:b')!.topic, 'Seal');
+});
+
+test('lineage is NOT drawn across topics (two plants stay separate)', () => {
+  // run 2 lists run 1 as a prior, but they are different topics -> no lineage edge
+  const g = projectGraph([mk(1, ['a'], [], 'Walrus'), mk(2, ['b'], ['1'], 'Seal')]);
+  assert.equal(g.edges.filter((e) => e.kind === 'lineage').length, 0);
+});
+
+test('lineage IS drawn within the same topic', () => {
+  const g = projectGraph([mk(1, ['a'], [], 'Walrus'), mk(2, ['b'], ['1'], 'Walrus')]);
+  assert.equal(g.edges.filter((e) => e.kind === 'lineage' && e.source === 'run:2' && e.target === 'run:1').length, 1);
 });
