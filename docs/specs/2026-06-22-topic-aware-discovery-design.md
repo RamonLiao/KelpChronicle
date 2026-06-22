@@ -33,8 +33,15 @@ recall(topic)
   → summarize(fresh) → remember → attest
 ```
 
-決定性契約不變（Rule 5）：所有步驟仍是 deterministic mapping，只有 summarize 是 model-shaped。
+**決定性契約（Rule 5）— 精確版**：契約是「**每個 raw IO → artifact 的 transform 都是純決定性 mapping**」，
+**IO 本身不可重現**（GitHub releases / search 排序 / HN 時序 run 當下才定）。搜尋讓「被錨定的內容」
+依 run 當下而變，因此 attestation 證明的是 **integrity + provenance**（這批 exact bytes 由 agent 產出並釘上鏈/Walrus），
+**不是 reproducibility**（重跑不保證同 bytes）。demo 敘事必須講 integrity，不可宣稱「verifiable = 可重新推導」。
 搜尋是 IO 但 mapping 為純函式，測試以注入 fake 覆蓋。
+
+> sui-architect 確認：lifeline 安全。`run.ts` 在記憶體組好 artifact 後，`remember(artifact)`（canonicalize→Walrus）
+> 與 `artifactHashHex(artifact)` 吃**同一個** in-memory 物件 → 搜尋非決定性永遠進不到 store↔anchor 之間，
+> 「stored bytes == attested hash」不受本變更影響。
 
 `THRESHOLD = 5`（fresh 少於 5 才補搜尋）。
 
@@ -60,6 +67,10 @@ export function resolveSources(topic: string): { repos: string[]; rssFeeds: stri
 - 關鍵字配對讓 `Walrus ecosystem` / `sui walrus` 都命中 walrus 來源，不必精確字串。
 - 保住現有 30-findings demo topic 走策展、穩定長葉。
 - 缺失 / 不存在的 repo 由 `fetchCandidates` 既有「per-source try/catch、skip 失敗」吸收，不致命。
+- **`CURATED_SOURCES` env 覆寫**：malformed JSON **fallback 回 seed list，不可 crash boot**（符合專案「中毒輸入不崩」ethos）。
+- **repo 正規化（防雙葉）**：策展 entry 的 repo 字串**必須**＝ GitHub 的 `full_name`（小寫 canonical `owner/name`）；
+  `mapGithubRelease` 兩個呼叫端（策展 fetch + search fan-out）都對 `repo` 做 lowercase 正規化，
+  否則同 repo 兩種寫法（casing / fork）會讓 `gh:` key 分裂、重複長葉。
 
 ### 3.2 `backend/src/fetch.ts`（改）
 
@@ -72,6 +83,11 @@ export function resolveSources(topic: string): { repos: string[]; rssFeeds: stri
     → map：key=`hn:<objectID>`、title=`title`、summary=`story_text || title`、
       sourceUrl=`safeHttpUrl(url) || https://news.ycombinator.com/item?id=<objectID>`。
   - 兩者無 key、回 JSON、失敗 skip（沿用 per-source try/catch）。
+  - **fan-out 控制流（新路徑，須明確）**：search→N repos→各自 releases 的**每個 release fetch 個別 try/catch-skip**
+    （一個壞 repo ≠ 整 run 死）且套用同一 `PER_REPO_TIMEOUT_MS`，否則 5-repo fan-out 在 timeout 下會串成 40s+ 卡死。
+  - **`GITHUB_TOKEN`**：未認證 GitHub 速率限制 = 10 req/min；一次 search-triggered run = 1 search + ≤5 releases = 6 calls
+    （加策展已花的）。search 與 fan-out releases 呼叫**都要帶** `GITHUB_TOKEN`（有設時），把上限拉到 5000/hr。
+    強烈建議 search 上線後設 token。
 - `dedupeByKey(findings)`：合併策展 + 搜尋 candidates 時去重（key 唯一）。
 
 ### 3.3 `backend/src/run.ts`（改）
@@ -94,6 +110,10 @@ if (fresh.length < THRESHOLD) {
 - 既有記憶 findings 為 `gh:<repo>@<tag>`；新增 A1 同樣 `gh:` → 跨來源自然 dedup，不重複長葉。
 - A3 `hn:<objectID>`（objectID 每篇 HN story 穩定）→ 跨 run dedup 正確。
 - topic 變更不影響 key（key 只來自來源內容），符合既有「mutable 欄位不入 key」契約。
+- **lineage 穩定性 ≠ key 穩定性（接受的 tradeoff）**：`runId = max(recalled priorRunIds)+1` 建在語意 top-K=20 recall 上。
+  搜尋讓 recall 更 noisy → 下一 run 的 `recall(topic)` 可能帶回不同 prior 集合，使 `priorRunIds` lineage 較不穩。
+  這**不破壞** attestation 唯一性（每次 `attest` 鑄出獨立 frozen object），只讓前端「記憶森林 lineage」敘事稍弱。
+  **明確接受**：key 穩定保證「不重複長葉」，但不保證「lineage 邊永遠相同」；demo 不依賴 lineage 精確性。
 
 ## 5. 錯誤處理
 
@@ -110,6 +130,7 @@ if (fresh.length < THRESHOLD) {
 | 巨大回應 / 海量 hit 耗盡 CPU/記憶體 | `per_page`/`hitsPerPage` 上限、repo fan-out 封頂 5、release 數封頂、既有 `MAX_RSS_BYTES` |
 | GitHub Search 未認證速率限制（10 req/min）被洪水打爆 | 409 single-flight + 搜尋僅在 fresh<門檻觸發 + repo fan-out 封頂 |
 | 中毒 key 讓 diff/canonicalize 崩 | 沿用來源 mapping 的 key 純化 + 既有 artifact 結構守衛（memory.ts isArtifact） |
+| **搜尋來源可被攻擊者影響內容**（star-farming 讓惡意 repo 進 `sort=stars`、貼 HN story）→ 注入你被錨定的 artifact + 未來 recall | `isArtifact` 只守**結構**不守**內容**——這是 narrative gap 非 crash gap。緩解：`safeHttpUrl` + 長度上限 + **誠實 framing：attestation 證明「agent 看過這條」，不證明「這條為真」**。star/HN-tag 排序當弱訊號，不引入 LLM 真偽判斷。 |
 
 ## 7. 測試（Rule 9 — 測 why 不只 what）
 
@@ -128,6 +149,9 @@ if (fresh.length < THRESHOLD) {
 - `npm test`（backend）全綠。
 - Live smoke：連錢包跑一個策展 topic（`walrus`）→ 穩定長葉；跑一個冷門 topic（如 `nautilus tee`）
   → 走搜尋 fallback、HN/GitHub 有料則長新葉。
+- **Lifeline live 驗（offline fake 蓋不到的唯一路徑）**：在**搜尋確實觸發**的那次 run，斷言
+  `artifactHashHex(artifact)` == 從 Walrus 取回 blob 重算的 hash（stored bytes == attested hash），
+  確認搜尋 candidates 進入 artifact 後 lifeline 仍成立。
 - 前端零改動，森林照常投影。
 
 ## 9. Deferred
