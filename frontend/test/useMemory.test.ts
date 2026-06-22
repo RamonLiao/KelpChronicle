@@ -31,3 +31,16 @@ test('keeps two artifacts that share a runId but differ in createdAtMs (backfill
   ]);
   assert.equal(merged.length, 2);
 });
+
+test('restricts merged artifacts to the allowed (watchlist) topics', () => {
+  const merged = mergeTopicArtifacts(
+    [{ data: [art('Walrus', 1), art('bleed-over', 2)] }],
+    ['Walrus'],
+  );
+  assert.deepEqual(merged.map((a) => a.topic), ['Walrus']);
+});
+
+test('no allow-list arg keeps every topic (back-compat)', () => {
+  const merged = mergeTopicArtifacts([{ data: [art('A', 1), art('B', 2)] }]);
+  assert.deepEqual(merged.map((a) => a.topic), ['A', 'B']);
+});
