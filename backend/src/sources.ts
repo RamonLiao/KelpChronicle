@@ -24,11 +24,17 @@ function loadCurated(): SourceEntry[] {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return SEED;
+    // Validate element types too, not just that match/repos are arrays: a row
+    // like {"match":[null],...} or {"rssFeeds":123} would pass a shallow
+    // Array.isArray check then crash in resolveSources (kw.toLowerCase() / for-of).
+    // Poisoned env must fall back to SEED, never crash (Rule 12 fail-loud → safe default).
+    const isStrArr = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string');
     const ok = parsed.every(
       (e) =>
         e && typeof e === 'object' &&
-        Array.isArray((e as SourceEntry).match) &&
-        Array.isArray((e as SourceEntry).repos),
+        isStrArr((e as SourceEntry).match) &&
+        isStrArr((e as SourceEntry).repos) &&
+        ((e as SourceEntry).rssFeeds === undefined || isStrArr((e as SourceEntry).rssFeeds)),
     );
     return ok ? (parsed as SourceEntry[]) : SEED;
   } catch {

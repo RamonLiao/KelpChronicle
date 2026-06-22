@@ -42,6 +42,14 @@ test('malformed CURATED_SOURCES env falls back to seed', () => {
     assert.ok(resolveSources('walrus').repos.includes('MystenLabs/walrus'));
     process.env.CURATED_SOURCES = '{"a":1}'; // not an array
     assert.ok(resolveSources('walrus').repos.includes('MystenLabs/walrus'));
+    // arrays present but elements wrong-typed — must fall back, NOT crash in
+    // kw.toLowerCase() / the rssFeeds for-of (regression: shallow Array.isArray gap).
+    process.env.CURATED_SOURCES = '[{"match":[null],"repos":[]}]';
+    assert.doesNotThrow(() => resolveSources('walrus'));
+    assert.ok(resolveSources('walrus').repos.includes('MystenLabs/walrus'));
+    process.env.CURATED_SOURCES = '[{"match":["x"],"repos":[],"rssFeeds":123}]';
+    assert.doesNotThrow(() => resolveSources('x'));
+    assert.ok(resolveSources('walrus').repos.includes('MystenLabs/walrus'));
   } finally {
     if (prev === undefined) delete process.env.CURATED_SOURCES;
     else process.env.CURATED_SOURCES = prev;
